@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local git worktrees
+.worktrees/
+
 # slutvival local dev data (seeded instances on Windows dev)
 /.slutvival-data/
 
