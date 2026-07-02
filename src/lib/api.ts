@@ -1,13 +1,16 @@
 import type {
   Backup,
+  BackupPolicyStatus,
   FileContent,
   FileNode,
+  GameVersion,
   InstalledMod,
   Instance,
   InstanceWithState,
   ModSearchResult,
   Player,
   PowerAction,
+  ServerSettings,
   WorldInfo,
 } from "./types";
 
@@ -73,9 +76,25 @@ export const api = {
 
   players: {
     list: (id: string) =>
-      fetcher<{ players: Player[] }>(`/api/instances/${id}/players`),
-    action: (id: string, action: string, name: string) =>
-      send<{ ok: true }>(`/api/instances/${id}/players`, "POST", { action, name }),
+      fetcher<{
+        players: Player[];
+        offline: Player[];
+        whitelist: Player[];
+        assignedRoles: Player[];
+        roles: string[];
+        defaultRole: string;
+      }>(`/api/instances/${id}/players`),
+    action: (
+      id: string,
+      action: string,
+      name: string,
+      extra?: Record<string, unknown>,
+    ) =>
+      send<{ ok: true }>(`/api/instances/${id}/players`, "POST", {
+        action,
+        name,
+        ...extra,
+      }),
   },
 
   files: {
@@ -114,9 +133,24 @@ export const api = {
 
   backups: {
     list: (id: string) =>
-      fetcher<{ backups: Backup[] }>(`/api/instances/${id}/backups`),
+      fetcher<{ backups: Backup[]; policy: BackupPolicyStatus }>(
+        `/api/instances/${id}/backups`,
+      ),
     op: (id: string, body: Record<string, unknown>) =>
       send<unknown>(`/api/instances/${id}/backups`, "POST", body),
+  },
+
+  settings: {
+    get: (id: string) =>
+      fetcher<{ settings: ServerSettings }>(`/api/instances/${id}/settings`),
+    update: (id: string, settings: ServerSettings) =>
+      send<{ instance: Instance; settings: ServerSettings }>(
+        `/api/instances/${id}/settings`,
+        "PATCH",
+        { settings },
+      ),
+    blacklist: (id: string, body: Record<string, unknown>) =>
+      send<{ settings: ServerSettings }>(`/api/instances/${id}/settings`, "POST", body),
   },
 
   world: {
@@ -125,9 +159,14 @@ export const api = {
       send<WorldInfo>(`/api/instances/${id}/world`, "PATCH", patch),
   },
 
+  vintageStory: {
+    versions: () =>
+      fetcher<{ versions: GameVersion[] }>("/api/vintage-story/versions"),
+  },
+
   versions: {
     get: (id: string) =>
-      fetcher<{ current: string; versions: import("./types").GameVersion[] }>(
+      fetcher<{ current: string; versions: GameVersion[] }>(
         `/api/instances/${id}/versions`,
       ),
     update: (id: string, version: string) =>

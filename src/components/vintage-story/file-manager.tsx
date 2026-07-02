@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import useSWR from "swr";
+import YAML from "yaml";
 import { toast } from "sonner";
 import {
   FolderIcon,
@@ -244,6 +245,7 @@ export function FileManager({ id }: { id: string }) {
             className="flex items-center gap-1 rounded px-1 py-0.5 text-muted-foreground hover:text-foreground"
           >
             <HomeIcon className="size-3.5" />
+            <span>/vintage</span>
           </button>
           {segments.map((seg, i) => (
             <span key={i} className="flex items-center">
@@ -504,8 +506,17 @@ function FileEditor({
   downloadUrl: string;
 }) {
   const gutter = React.useRef<HTMLDivElement>(null);
+  const highlight = React.useRef<HTMLDivElement>(null);
   const dirty = file.content !== file.original;
   const lineCount = file.content.split("\n").length;
+  const syntax = React.useMemo(
+    () => analyzeSyntax(file.name, file.language, file.content),
+    [file.name, file.language, file.content],
+  );
+  const highlighted = React.useMemo(
+    () => highlightContent(file.name, file.language, file.content),
+    [file.name, file.language, file.content],
+  );
 
   if (file.loading) {
     return (
@@ -534,7 +545,26 @@ function FileEditor({
         <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground">
           {file.language}
         </span>
-        <span className="truncate font-mono text-xs text-muted-foreground">{file.path}</span>
+        <span
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase",
+            syntax.status === "invalid"
+              ? "bg-destructive/15 text-destructive"
+              : syntax.status === "valid"
+                ? "bg-emerald-500/15 text-emerald-300"
+                : "bg-muted text-muted-foreground",
+          )}
+        >
+          {syntax.label}
+        </span>
+        <span className="truncate font-mono text-xs text-muted-foreground">
+          {displayPath(file.path)}
+        </span>
+        {syntax.status === "invalid" && (
+          <span className="min-w-0 truncate text-xs text-destructive">
+            {syntax.message}
+          </span>
+        )}
         {dirty && <span className="text-[10px] font-medium text-primary">● unsaved</span>}
         <div className="ml-auto flex items-center gap-1.5">
           <Button variant="ghost" size="sm" onClick={onRevert} disabled={!dirty}>
@@ -548,31 +578,55 @@ function FileEditor({
           </Button>
         </div>
       </div>
-      <div className="flex flex-1 overflow-hidden bg-[oklch(0.15_0.006_300)]">
+      <div
+        className={cn(
+          "flex flex-1 overflow-hidden bg-[oklch(0.15_0.006_300)]",
+          syntax.status === "invalid" && "ring-1 ring-inset ring-destructive/60",
+        )}
+      >
         <div
           ref={gutter}
-          className="select-none overflow-hidden py-3 pl-3 pr-2 text-right font-mono text-xs leading-[1.6] text-muted-foreground/40"
+          className={cn(
+            "select-none overflow-hidden py-3 pl-3 pr-2 text-right font-mono text-xs leading-[1.6]",
+            syntax.status === "invalid" ? "text-destructive/50" : "text-muted-foreground/40",
+          )}
           aria-hidden
         >
           {Array.from({ length: lineCount }).map((_, i) => (
             <div key={i}>{i + 1}</div>
           ))}
         </div>
-        <textarea
-          value={file.content}
-          spellCheck={false}
-          onChange={(e) => onChange(e.target.value)}
-          onScroll={(e) => {
-            if (gutter.current) gutter.current.scrollTop = e.currentTarget.scrollTop;
-          }}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-              e.preventDefault();
-              onSave();
-            }
-          }}
-          className="min-h-[50vh] flex-1 resize-none bg-transparent py-3 pr-3 font-mono text-xs leading-[1.6] text-foreground outline-none"
-        />
+        <div className="relative min-h-[50vh] min-w-0 flex-1 overflow-hidden">
+          <div
+            ref={highlight}
+            className="pointer-events-none absolute inset-0 overflow-hidden py-3 pr-3 font-mono text-xs leading-[1.6]"
+            aria-hidden
+          >
+            <pre className="m-0 min-h-full whitespace-pre-wrap break-words [font-family:inherit]">
+              {highlighted}
+              {file.content.endsWith("\n") ? " " : null}
+            </pre>
+          </div>
+          <textarea
+            value={file.content}
+            spellCheck={false}
+            onChange={(e) => onChange(e.target.value)}
+            onScroll={(e) => {
+              if (gutter.current) gutter.current.scrollTop = e.currentTarget.scrollTop;
+              if (highlight.current) {
+                highlight.current.scrollTop = e.currentTarget.scrollTop;
+                highlight.current.scrollLeft = e.currentTarget.scrollLeft;
+              }
+            }}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+                e.preventDefault();
+                onSave();
+              }
+            }}
+            className="relative z-10 h-full min-h-[50vh] w-full resize-none bg-transparent py-3 pr-3 font-mono text-xs leading-[1.6] text-transparent caret-foreground outline-none selection:bg-primary/30"
+          />
+        </div>
       </div>
     </div>
   );
@@ -580,4 +634,335 @@ function FileEditor({
 
 function join(dir: string, name: string): string {
   return dir ? `${dir}/${name}` : name;
+}
+
+function displayPath(path: string): string {
+  return path ? `/vintage/${path}` : "/vintage";
+}
+
+type SyntaxStatus = "valid" | "invalid" | "unchecked";
+
+interface SyntaxAnalysis {
+  status: SyntaxStatus;
+  label: string;
+  message?: string;
+}
+
+const HIGHLIGHT_LIMIT = 350_000;
+
+const CODE_LANGUAGES = new Set([
+  "javascript",
+  "typescript",
+  "csharp",
+  "css",
+  "bash",
+]);
+
+function analyzeSyntax(name: string, language: string, content: string): SyntaxAnalysis {
+  const lang = normalizedLanguage(name, language);
+  if (!content.trim()) {
+    return supportsValidation(lang, name)
+      ? { status: "valid", label: "valid" }
+      : { status: "unchecked", label: "highlighted" };
+  }
+
+  try {
+    if (lang === "json" && !name.toLowerCase().endsWith(".json5")) {
+      JSON.parse(content);
+      return { status: "valid", label: "valid" };
+    }
+
+    if (lang === "yaml") {
+      YAML.parse(content);
+      return { status: "valid", label: "valid" };
+    }
+
+    if (lang === "xml" || lang === "html") {
+      const message = validateXmlLike(content, lang);
+      return message
+        ? { status: "invalid", label: "invalid", message }
+        : { status: "valid", label: "valid" };
+    }
+
+    if (CODE_LANGUAGES.has(lang) || name.toLowerCase().endsWith(".json5")) {
+      const message = validateCodeShape(content);
+      return message
+        ? { status: "invalid", label: "invalid", message }
+        : { status: "valid", label: "valid" };
+    }
+  } catch (e) {
+    return {
+      status: "invalid",
+      label: "invalid",
+      message: e instanceof Error ? cleanError(e.message) : "Syntax error",
+    };
+  }
+
+  return { status: "unchecked", label: "highlighted" };
+}
+
+function supportsValidation(language: string, name: string) {
+  return (
+    language === "json" ||
+    language === "yaml" ||
+    language === "xml" ||
+    language === "html" ||
+    CODE_LANGUAGES.has(language) ||
+    name.toLowerCase().endsWith(".json5")
+  );
+}
+
+function validateXmlLike(content: string, language: string): string | undefined {
+  if (typeof DOMParser === "undefined") return undefined;
+  const doc = new DOMParser().parseFromString(
+    content,
+    language === "html" ? "text/html" : "application/xml",
+  );
+  if (language === "html") return undefined;
+  const error = doc.querySelector("parsererror");
+  return error?.textContent?.replace(/\s+/g, " ").trim() || undefined;
+}
+
+function validateCodeShape(content: string): string | undefined {
+  const stack: Array<{ char: string; index: number }> = [];
+  let quote: "\"" | "'" | "`" | null = null;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let i = 0; i < content.length; i += 1) {
+    const char = content[i];
+    const next = content[i + 1];
+
+    if (lineComment) {
+      if (char === "\n") lineComment = false;
+      continue;
+    }
+
+    if (blockComment) {
+      if (char === "*" && next === "/") {
+        blockComment = false;
+        i += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      lineComment = true;
+      i += 1;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      blockComment = true;
+      i += 1;
+      continue;
+    }
+
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === "{" || char === "[" || char === "(") {
+      stack.push({ char, index: i });
+      continue;
+    }
+
+    if (char === "}" || char === "]" || char === ")") {
+      const open = stack.pop();
+      if (!open || matchingClose(open.char) !== char) {
+        return `Unexpected ${char} at ${positionLabel(content, i)}`;
+      }
+    }
+  }
+
+  if (quote) return `Unclosed ${quote} string`;
+  if (blockComment) return "Unclosed block comment";
+  const open = stack.pop();
+  if (open) return `Unclosed ${open.char} at ${positionLabel(content, open.index)}`;
+  return undefined;
+}
+
+function matchingClose(char: string) {
+  switch (char) {
+    case "{":
+      return "}";
+    case "[":
+      return "]";
+    default:
+      return ")";
+  }
+}
+
+function positionLabel(content: string, index: number) {
+  const before = content.slice(0, index);
+  const line = before.split("\n").length;
+  const column = before.length - before.lastIndexOf("\n");
+  return `line ${line}, column ${column}`;
+}
+
+function highlightContent(
+  name: string,
+  language: string,
+  content: string,
+): React.ReactNode {
+  if (!content || content.length > HIGHLIGHT_LIMIT) return content;
+  const lang = normalizedLanguage(name, language);
+
+  if (lang === "xml" || lang === "html") return highlightXml(content);
+  if (lang === "yaml" || lang === "bash" || lang === "ini") return highlightHashLanguage(content, lang);
+  if (
+    lang === "json" ||
+    lang === "json5" ||
+    lang === "javascript" ||
+    lang === "typescript" ||
+    lang === "csharp" ||
+    lang === "css" ||
+    lang === "toml"
+  ) {
+    return highlightGeneric(content, lang);
+  }
+
+  return content;
+}
+
+function highlightGeneric(content: string, language: string): React.ReactNode[] {
+  const keywordPattern = keywordRegex(language);
+  const tokenPattern =
+    /\/\*[\s\S]*?\*\/|\/\/[^\n]*|`(?:\\.|[^`\\])*`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:true|false|null|undefined)\b|\b\d+(?:\.\d+)?\b|[{}()[\]:,.;=<>/+*%-]/g;
+
+  return tokenize(content, tokenPattern, (token, index) => {
+    if (token.startsWith("/*") || token.startsWith("//")) return "comment";
+    if (isQuoted(token)) {
+      return nextNonSpace(content, index + token.length) === ":" ? "key" : "string";
+    }
+    if (/^\d/.test(token)) return "number";
+    if (/^(true|false|null|undefined)$/.test(token)) return "literal";
+    if (keywordPattern?.test(token)) return "keyword";
+    return "punctuation";
+  });
+}
+
+function highlightHashLanguage(content: string, language: string): React.ReactNode[] {
+  const tokenPattern =
+    /#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|^[ \t]*[A-Za-z0-9_.-]+(?=\s*:)|\b(?:true|false|null|on|off|yes|no)\b|\b\d+(?:\.\d+)?\b|[-?:,[\]{}=]/gm;
+
+  return tokenize(content, tokenPattern, (token) => {
+    if (token.trimStart().startsWith("#")) return "comment";
+    if (/^[ \t]*[A-Za-z0-9_.-]+$/.test(token) && language !== "bash") return "key";
+    if (isQuoted(token)) return "string";
+    if (/^\d/.test(token)) return "number";
+    if (/^(true|false|null|on|off|yes|no)$/i.test(token)) return "literal";
+    return "punctuation";
+  });
+}
+
+function highlightXml(content: string): React.ReactNode[] {
+  const tokenPattern = /<!--[\s\S]*?-->|<\/?[A-Za-z][\w:.-]*(?:\s+[\w:.-]+(?:=(?:"[^"]*"|'[^']*'))?)*\s*\/?>|&[a-zA-Z0-9#]+;/g;
+  return tokenize(content, tokenPattern, (token) => {
+    if (token.startsWith("<!--")) return "comment";
+    if (token.startsWith("&")) return "literal";
+    return "tag";
+  });
+}
+
+function tokenize(
+  content: string,
+  pattern: RegExp,
+  classify: (token: string, index: number) => TokenKind,
+): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+
+  for (const match of content.matchAll(pattern)) {
+    const token = match[0];
+    const index = match.index ?? 0;
+    if (!token) continue;
+    if (index > last) nodes.push(content.slice(last, index));
+    nodes.push(
+      <span key={key} className={tokenClassName(classify(token, index))}>
+        {token}
+      </span>,
+    );
+    key += 1;
+    last = index + token.length;
+  }
+
+  if (last < content.length) nodes.push(content.slice(last));
+  return nodes;
+}
+
+type TokenKind =
+  | "comment"
+  | "key"
+  | "string"
+  | "number"
+  | "literal"
+  | "keyword"
+  | "punctuation"
+  | "tag";
+
+function tokenClassName(kind: TokenKind): string {
+  switch (kind) {
+    case "comment":
+      return "text-muted-foreground/65";
+    case "key":
+      return "text-sky-300";
+    case "string":
+      return "text-emerald-300";
+    case "number":
+      return "text-amber-300";
+    case "literal":
+      return "text-fuchsia-300";
+    case "keyword":
+      return "text-violet-300";
+    case "tag":
+      return "text-pink-300";
+    default:
+      return "text-muted-foreground/85";
+  }
+}
+
+function keywordRegex(language: string): RegExp | undefined {
+  if (language === "css") return /^(?:important|from|to)$/;
+  if (language === "json" || language === "toml") return undefined;
+  return /^(?:abstract|async|await|break|case|catch|class|const|continue|default|do|else|enum|export|extends|false|finally|for|foreach|from|function|get|if|implements|import|in|interface|let|namespace|new|null|private|protected|public|readonly|return|set|static|string|switch|this|throw|true|try|type|typeof|using|var|void|while|yield)$/;
+}
+
+function normalizedLanguage(name: string, language: string): string {
+  const ext = name.split(".").pop()?.toLowerCase();
+  if (ext === "json5") return "json5";
+  if (ext === "yml") return "yaml";
+  if (ext === "htm") return "html";
+  return language.toLowerCase();
+}
+
+function isQuoted(token: string) {
+  return (
+    (token.startsWith("\"") && token.endsWith("\"")) ||
+    (token.startsWith("'") && token.endsWith("'")) ||
+    (token.startsWith("`") && token.endsWith("`"))
+  );
+}
+
+function nextNonSpace(content: string, start: number) {
+  const match = /\S/.exec(content.slice(start));
+  return match?.[0];
+}
+
+function cleanError(message: string): string {
+  return message.replace(/\s+/g, " ").replace(/^JSON\.parse: /, "").trim();
 }

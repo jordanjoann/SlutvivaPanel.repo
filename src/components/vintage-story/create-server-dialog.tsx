@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
+import useSWR, { useSWRConfig } from "swr";
 import { useRouter } from "next/navigation";
-import { useSWRConfig } from "swr";
 import { toast } from "sonner";
 import { PlusIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,9 +24,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
+import {
+  DEFAULT_VINTAGE_STORY_VERSION,
+  FALLBACK_VINTAGE_STORY_VERSIONS,
+} from "@/lib/vintage-story-versions";
 
-const VERSIONS = ["1.20.7", "1.20.6", "1.20.5", "1.20.4"];
 const MEMORY = [
   { v: "2048", label: "2 GB" },
   { v: "3072", label: "3 GB" },
@@ -39,23 +43,31 @@ export function CreateServerDialog() {
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [name, setName] = React.useState("");
-  const [group, setGroup] = React.useState("Servers");
-  const [version, setVersion] = React.useState("1.20.7");
+  const [development, setDevelopment] = React.useState(false);
+  const [version, setVersion] = React.useState("");
   const [maxPlayers, setMaxPlayers] = React.useState("16");
   const [memory, setMemory] = React.useState("4096");
   const router = useRouter();
   const { mutate } = useSWRConfig();
+  const { data: versionData } = useSWR("vintage-story-versions", api.vintageStory.versions);
+  const versions = versionData?.versions ?? FALLBACK_VINTAGE_STORY_VERSIONS;
+  const defaultVersion =
+    versions.find((v) => v.latest)?.version ?? DEFAULT_VINTAGE_STORY_VERSION;
+  const selectedVersion = version || defaultVersion;
 
-  React.useEffect(() => {
-    if (!open) {
-      setName("");
-      setGroup("Servers");
-      setVersion("1.20.7");
-      setMaxPlayers("16");
-      setMemory("4096");
-      setBusy(false);
-    }
-  }, [open]);
+  function resetForm() {
+    setName("");
+    setDevelopment(false);
+    setVersion("");
+    setMaxPlayers("16");
+    setMemory("4096");
+    setBusy(false);
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) resetForm();
+  }
 
   async function submit() {
     if (!name.trim()) {
@@ -66,14 +78,15 @@ export function CreateServerDialog() {
       setBusy(true);
       const created = await api.instances.create({
         name: name.trim(),
-        group: group.trim() || "Servers",
-        version,
+        group: development ? "Development" : "Servers",
+        development,
+        version: selectedVersion,
         maxPlayers: Number(maxPlayers) || 16,
         resources: { memoryLimitMB: Number(memory), cpuLimit: 2 },
       });
       await mutate((key) => Array.isArray(key) && key[0] === "instances");
       toast.success(`Server “${created.name}” created`);
-      setOpen(false);
+      handleOpenChange(false);
       router.push(`/vintage-story/${created.id}`);
     } catch (e) {
       toast.error("Failed to create server", {
@@ -85,7 +98,7 @@ export function CreateServerDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={<Button />}>
         <PlusIcon /> New Server
       </DialogTrigger>
@@ -110,24 +123,30 @@ export function CreateServerDialog() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="sv-group">Group</Label>
-              <Input
-                id="sv-group"
-                value={group}
-                onChange={(e) => setGroup(e.target.value)}
+            <div className="flex min-h-16 items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3.5 py-3">
+              <div>
+                <Label htmlFor="sv-development" className="text-sm">
+                  For development
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">Whitelist only</p>
+              </div>
+              <Switch
+                id="sv-development"
+                checked={development}
+                onCheckedChange={setDevelopment}
               />
             </div>
             <div className="grid gap-2">
               <Label>Version</Label>
-              <Select value={version} onValueChange={(v) => setVersion(v as string)}>
+              <Select value={selectedVersion} onValueChange={(v) => setVersion(v as string)}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {VERSIONS.map((v) => (
-                    <SelectItem key={v} value={v}>
-                      v{v}
+                  {versions.map((v) => (
+                    <SelectItem key={v.version} value={v.version}>
+                      v{v.version}
+                      {v.latest ? " · latest" : v.channel !== "stable" ? ` · ${v.channel}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -168,7 +187,7 @@ export function CreateServerDialog() {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
           <Button onClick={submit} disabled={busy}>

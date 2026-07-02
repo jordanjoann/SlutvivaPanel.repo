@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import * as React from "react";
 import useSWR from "swr";
 import { toast } from "sonner";
@@ -109,7 +111,7 @@ export function ModsManager({ id }: { id: string }) {
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <SearchIcon className="size-4" /> Browse repository
+            <SearchIcon className="size-4" /> Browse Mod Database
           </button>
         </div>
       </div>
@@ -181,6 +183,28 @@ function InstalledList({
   onUpdate: (m: InstalledMod) => void;
   onDelete: (m: InstalledMod) => void;
 }) {
+  const [query, setQuery] = React.useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredMods = React.useMemo(() => {
+    if (!mods || !normalizedQuery) return mods ?? [];
+    return mods.filter((mod) =>
+      [
+        mod.name,
+        mod.id,
+        mod.author,
+        mod.description,
+        mod.fileName,
+        mod.side,
+        mod.installedVersion,
+        mod.latestVersion,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [mods, normalizedQuery]);
+
   if (loading && !mods) {
     return (
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -195,61 +219,81 @@ function InstalledList({
       <EmptyState
         icon={PackageIcon}
         title="No mods installed"
-        description="Browse the repository or drag a .zip archive here to install mods."
+        description="Browse the Mod Database or drag a .zip archive here to install mods."
       />
     );
   }
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {mods.map((m) => {
-        const updatable = m.latestVersion && m.latestVersion !== m.installedVersion;
-        return (
-          <div
-            key={m.id}
-            className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
-          >
-            <div className="flex items-start gap-3">
-              <ModIcon name={m.name} />
-              <div className="min-w-0 flex-1">
-                <h3 className="truncate text-sm font-semibold">{m.name}</h3>
-                <p className="truncate text-xs text-muted-foreground">
-                  {m.author ? `by ${m.author}` : m.id}
+    <div className="flex flex-col gap-3">
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search installed mods..."
+          className="h-10 pl-9"
+        />
+      </div>
+
+      {filteredMods.length === 0 ? (
+        <EmptyState
+          icon={SearchIcon}
+          title="No installed mods found"
+          description="Try a different search term."
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {filteredMods.map((m) => {
+            const updatable = m.latestVersion && m.latestVersion !== m.installedVersion;
+            return (
+              <div
+                key={m.id}
+                className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <ModIcon name={m.name} src={m.iconUrl} />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-sm font-semibold">{m.name}</h3>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {m.author ? `by ${m.author}` : m.id}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={m.enabled}
+                    onCheckedChange={(v) => onToggle(m, v)}
+                    aria-label="Enabled"
+                  />
+                </div>
+                <p className="line-clamp-2 text-xs text-muted-foreground">
+                  {m.description || "No description available."}
                 </p>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono">v{m.installedVersion}</span>
+                  {updatable && (
+                    <span className="rounded bg-warning/15 px-1.5 py-0.5 font-medium text-warning">
+                      → v{m.latestVersion}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-auto flex items-center gap-2">
+                  {updatable ? (
+                    <Button size="sm" onClick={() => onUpdate(m)}>
+                      <ArrowUpCircleIcon /> Update
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" disabled>
+                      Up to date
+                    </Button>
+                  )}
+                  <Button size="sm" variant="destructive" className="ml-auto" onClick={() => onDelete(m)}>
+                    <Trash2Icon /> Delete
+                  </Button>
+                </div>
               </div>
-              <Switch
-                checked={m.enabled}
-                onCheckedChange={(v) => onToggle(m, v)}
-                aria-label="Enabled"
-              />
-            </div>
-            <p className="line-clamp-2 text-xs text-muted-foreground">
-              {m.description || "No description available."}
-            </p>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="rounded bg-muted px-1.5 py-0.5 font-mono">v{m.installedVersion}</span>
-              {updatable && (
-                <span className="rounded bg-warning/15 px-1.5 py-0.5 font-medium text-warning">
-                  → v{m.latestVersion}
-                </span>
-              )}
-            </div>
-            <div className="mt-auto flex items-center gap-2">
-              {updatable ? (
-                <Button size="sm" onClick={() => onUpdate(m)}>
-                  <ArrowUpCircleIcon /> Update
-                </Button>
-              ) : (
-                <Button size="sm" variant="outline" disabled>
-                  Up to date
-                </Button>
-              )}
-              <Button size="sm" variant="destructive" className="ml-auto" onClick={() => onDelete(m)}>
-                <Trash2Icon /> Delete
-              </Button>
-            </div>
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -365,7 +409,7 @@ function Repository({
             return (
               <div key={r.id} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
                 <div className="flex items-start gap-3">
-                  <ModIcon name={r.name} />
+                  <ModIcon name={r.name} src={r.iconUrl} />
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-sm font-semibold">{r.name}</h3>
                     <p className="truncate text-xs text-muted-foreground">by {r.author}</p>
@@ -455,10 +499,28 @@ function Repository({
   );
 }
 
-function ModIcon({ name }: { name: string }) {
+function ModIcon({ name, src }: { name: string; src?: string }) {
+  const [failed, setFailed] = React.useState(false);
+  const initials = name.slice(0, 2).toUpperCase();
+
+  if (src && !failed) {
+    return (
+      <div className="flex size-10 shrink-0 overflow-hidden rounded-lg bg-primary/10 ring-1 ring-primary/15">
+        <img
+          src={src}
+          alt=""
+          className="size-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary ring-1 ring-primary/15">
-      {name.slice(0, 2).toUpperCase()}
+      {initials}
     </div>
   );
 }

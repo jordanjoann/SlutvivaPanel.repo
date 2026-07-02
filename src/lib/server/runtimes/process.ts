@@ -131,7 +131,7 @@ export class ProcessRuntime implements Runtime {
   }
 
   async sendCommand(command: string) {
-    consoleBus.push(this.instance.id, `> ${command}`, "command");
+    consoleBus.push(this.instance.id, command, "command");
     if (!this.child) {
       consoleBus.push(this.instance.id, "Server is not running.", "system", "warning");
       return;

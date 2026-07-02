@@ -11,7 +11,7 @@ export default function ModsPage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Mods"
-        description="Manage installed mods or browse the repository. Changes apply after the next restart."
+        description="Manage installed mods or browse the Mod Database. Changes apply after the next restart."
         icon={PackageIcon}
       />
       <ModsManager id={id} />

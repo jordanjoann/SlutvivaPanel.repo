@@ -2,29 +2,31 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Instance } from "@/lib/types";
 import { instanceDir, vsPaths } from "./config";
+import { DEFAULT_VINTAGE_STORY_VERSION } from "@/lib/vintage-story-versions";
 
 /** Demo instances seeded on first run (matches the spec's example list). */
 export const DEMO_INSTANCES: Array<Partial<Instance> & { id: string; name: string }> = [
   {
     id: "testing",
     name: "Testing",
-    group: "Sandbox",
+    group: "Servers",
     description: "Throwaway world for trying mods and configs.",
-    version: "1.20.7",
+    version: DEFAULT_VINTAGE_STORY_VERSION,
     port: 42420,
     worldName: "Testbed",
     seed: "482913",
     maxPlayers: 8,
     autoRestart: true,
-    autoBackup: false,
+    autoBackup: true,
     resources: { memoryLimitMB: 3072, cpuLimit: 1.5 },
   },
   {
     id: "development",
     name: "Development",
-    group: "Sandbox",
+    group: "Development",
+    development: true,
     description: "Staging server mirroring Main for mod development.",
-    version: "1.20.7",
+    version: DEFAULT_VINTAGE_STORY_VERSION,
     port: 42421,
     worldName: "DevWorld",
     seed: "seed-dev-01",
@@ -35,9 +37,9 @@ export const DEMO_INSTANCES: Array<Partial<Instance> & { id: string; name: strin
   {
     id: "main",
     name: "Main",
-    group: "Production",
+    group: "Servers",
     description: "The primary community survival server.",
-    version: "1.20.7",
+    version: DEFAULT_VINTAGE_STORY_VERSION,
     port: 42422,
     worldName: "Aurora",
     seed: "1337-aurora",
@@ -51,9 +53,9 @@ export const DEMO_INSTANCES: Array<Partial<Instance> & { id: string; name: strin
   {
     id: "skyblock",
     name: "Skyblock",
-    group: "Production",
+    group: "Servers",
     description: "Curated skyblock challenge modpack.",
-    version: "1.20.6",
+    version: DEFAULT_VINTAGE_STORY_VERSION,
     port: 42423,
     worldName: "SkyIslands",
     seed: "sky-9921",
@@ -100,7 +102,7 @@ function serverConfig(inst: Instance) {
     StartupCommands: "",
     ModIds: DEMO_MODS.filter((m) => m.enabled).map((m) => m.id),
     ModConfig: {},
-    OnlyWhitelisted: false,
+    OnlyWhitelisted: inst.development,
     Motd: inst.motd ?? "",
   };
 }
@@ -146,8 +148,8 @@ export async function seedInstanceContent(inst: Instance): Promise<void> {
 
   // Backups index + a couple of placeholder archives
   const backups = [
-    { id: "bk-auto-1", name: `auto-${inst.worldName}-daily`, kind: "auto", sizeBytes: 210 * 1024 * 1024, createdAt: now - 86400000, worldName: inst.worldName, note: "Nightly auto backup" },
-    { id: "bk-manual-1", name: `manual-preupdate`, kind: "pre-update", sizeBytes: 205 * 1024 * 1024, createdAt: now - 3 * 86400000, worldName: inst.worldName, note: "Before 1.20.7 update" },
+    { id: "bk-auto-1", name: `auto-${inst.worldName}-daily`, kind: "auto", sizeBytes: 210 * 1024 * 1024, createdAt: now - 86400000, worldName: inst.worldName, note: "Legacy auto backup" },
+    { id: "bk-manual-1", name: `manual-preupdate`, kind: "pre-update", sizeBytes: 205 * 1024 * 1024, createdAt: now - 3 * 86400000, worldName: inst.worldName, note: `Before ${DEFAULT_VINTAGE_STORY_VERSION} update` },
   ];
   await writeJson(path.join(p.backups, "index.json"), backups);
 
@@ -170,7 +172,7 @@ export async function seedInstanceContent(inst: Instance): Promise<void> {
   );
   await fs.writeFile(
     path.join(dir, "notes", "todo.md"),
-    `# Notes — ${inst.name}\n\n- [ ] Review mod updates\n- [ ] Check temporal storm settings\n- [x] Set up nightly backups\n`,
+    `# Notes — ${inst.name}\n\n- [ ] Review mod updates\n- [ ] Check temporal storm settings\n- [x] Set up rolling restore points\n`,
     "utf8",
   );
 }

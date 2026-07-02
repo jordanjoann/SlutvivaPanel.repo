@@ -127,7 +127,7 @@ export class DockerRuntime implements Runtime {
   }
 
   async sendCommand(command: string) {
-    consoleBus.push(this.instance.id, `> ${command}`, "command");
+    consoleBus.push(this.instance.id, command, "command");
     try {
       if (!this.stdin) {
         const stream = (await this.container().attach({

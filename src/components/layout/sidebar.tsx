@@ -8,19 +8,6 @@ export function Sidebar() {
         <Brand />
       </div>
       <SidebarNav />
-      <div className="border-t border-sidebar-border p-3">
-        <div className="flex items-center gap-2 rounded-lg bg-sidebar-accent/40 px-3 py-2.5">
-          <span className="size-2 rounded-full bg-success pulse-dot" />
-          <div className="min-w-0 leading-tight">
-            <p className="truncate text-xs font-medium text-sidebar-foreground">
-              All systems operational
-            </p>
-            <p className="truncate text-[10px] text-muted-foreground">
-              panel.slutvival.com
-            </p>
-          </div>
-        </div>
-      </div>
     </aside>
   );
 }

@@ -1,52 +1,102 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import * as React from "react";
 import useSWR from "swr";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import {
-  SettingsIcon,
-  ServerCogIcon,
-  NetworkIcon,
-  LockIcon,
-  CpuIcon,
-  ContainerIcon,
-  RefreshCwIcon,
+  BanIcon,
   DownloadIcon,
-  KeyRoundIcon,
+  GlobeIcon,
   Loader2Icon,
+  NetworkIcon,
+  PackageSearchIcon,
+  PlusIcon,
   SaveIcon,
+  ServerCogIcon,
+  SettingsIcon,
+  ShieldIcon,
+  Trash2Icon,
+  WaypointsIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useInstance } from "@/hooks/use-instances";
 import { PageHeader } from "@/components/panel/page-header";
 import { SectionCard } from "@/components/panel/section-card";
+import { EmptyState } from "@/components/panel/empty-state";
 import { useConfirm } from "@/components/panel/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { Instance, InstanceWithState } from "@/lib/types";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/format";
+import type {
+  GameVersion,
+  InstanceWithState,
+  ModBlacklistEntry,
+  ModSearchResult,
+  ServerSettings,
+} from "@/lib/types";
 
-const MEMORY = [2048, 3072, 4096, 6144, 8192, 12288, 16384];
+const EMPTY_SETTINGS: ServerSettings = {
+  general: {
+    serverName: "",
+    serverDescription: "",
+    welcomeMessage: "",
+    advertiseServer: false,
+    maxPlayers: 16,
+    passTimeWhenEmpty: false,
+    password: "",
+    whitelistMode: false,
+    allowPvp: true,
+    allowFireSpread: true,
+    allowFallingBlocks: true,
+  },
+  admin: {
+    entityDebugMode: false,
+    masterServerUrl: "",
+    modDbUrl: "",
+    antiAbuseLevel: 0,
+    maxOwnedGroupChannelsPerUser: 1,
+    numberOfLandClaims: 1,
+    landClaimMinSize: 1,
+    landClaimMaxSize: 256,
+    chatRateLimitMs: 1000,
+    dieBelowDiskSpaceMb: 1000,
+  },
+  world: {
+    maxChunkRadius: 12,
+  },
+  network: {
+    port: 42420,
+    upnp: false,
+    compressPackets: true,
+    clientConnectionTimeoutSeconds: 360,
+  },
+  mods: {
+    modPaths: [],
+    modBlacklist: [],
+  },
+};
 
 export default function SettingsPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: instance, mutate } = useInstance(id);
+  const { data: instance, mutate: mutateInstance } = useInstance(id);
+  const settings = useSWR(["server-settings", id], () => api.settings.get(id));
 
-  if (!instance) {
+  if (!instance || (settings.isLoading && !settings.data)) {
     return (
       <div className="flex flex-col gap-5">
-        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-12 rounded-lg" />
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-48 rounded-xl" />
         ))}
@@ -55,263 +105,662 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Admin & Settings"
-        description="Configure this server. Settings marked “restart required” apply on the next restart."
-        icon={SettingsIcon}
-      />
-      <SettingsForm instance={instance} onSaved={() => mutate()} />
-      <VersionUpdate id={id} currentStatus={instance.state.status} onUpdated={() => mutate()} />
-      <EnvVars instance={instance} />
-    </div>
+    <SettingsWorkspace
+      id={id}
+      instance={instance}
+      initial={settings.data?.settings ?? EMPTY_SETTINGS}
+      mutateInstance={mutateInstance}
+      mutateSettings={settings.mutate}
+    />
   );
 }
 
-function RestartHint() {
-  return (
-    <span className="ml-2 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning">
-      restart required
-    </span>
-  );
-}
-
-function SettingsForm({
+function SettingsWorkspace({
+  id,
   instance,
-  onSaved,
+  initial,
+  mutateInstance,
+  mutateSettings,
 }: {
+  id: string;
   instance: InstanceWithState;
-  onSaved: () => void;
+  initial: ServerSettings;
+  mutateInstance: () => void;
+  mutateSettings: (data?: { settings: ServerSettings }, shouldRevalidate?: boolean) => void;
 }) {
-  const [form, setForm] = React.useState({
-    name: instance.name,
-    description: instance.description ?? "",
-    motd: instance.motd ?? "",
-    group: instance.group ?? "",
-    port: instance.port,
-    maxPlayers: instance.maxPlayers,
-    passwordProtected: instance.passwordProtected,
-    publicAdvertised: instance.publicAdvertised,
-    memoryLimitMB: instance.resources.memoryLimitMB,
-    cpuLimit: instance.resources.cpuLimit,
-    containerName: instance.docker.containerName,
-    image: instance.docker.image,
-    autoRestart: instance.autoRestart,
-    autoBackup: instance.autoBackup,
-  });
+  const [form, setForm] = React.useState(initial);
   const [saving, setSaving] = React.useState(false);
 
-  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
+  const dirty = React.useMemo(() => settingsKey(form) !== settingsKey(initial), [form, initial]);
+
+  function setGeneral(patch: Partial<ServerSettings["general"]>) {
+    setForm((current) => ({ ...current, general: { ...current.general, ...patch } }));
   }
 
-  const dirty =
-    form.name !== instance.name ||
-    form.description !== (instance.description ?? "") ||
-    form.motd !== (instance.motd ?? "") ||
-    form.group !== (instance.group ?? "") ||
-    form.port !== instance.port ||
-    form.maxPlayers !== instance.maxPlayers ||
-    form.passwordProtected !== instance.passwordProtected ||
-    form.publicAdvertised !== instance.publicAdvertised ||
-    form.memoryLimitMB !== instance.resources.memoryLimitMB ||
-    form.cpuLimit !== instance.resources.cpuLimit ||
-    form.containerName !== instance.docker.containerName ||
-    form.image !== instance.docker.image ||
-    form.autoRestart !== instance.autoRestart ||
-    form.autoBackup !== instance.autoBackup;
+  function setAdmin(patch: Partial<ServerSettings["admin"]>) {
+    setForm((current) => ({ ...current, admin: { ...current.admin, ...patch } }));
+  }
+
+  function setWorld(patch: Partial<ServerSettings["world"]>) {
+    setForm((current) => ({ ...current, world: { ...current.world, ...patch } }));
+  }
+
+  function setNetwork(patch: Partial<ServerSettings["network"]>) {
+    setForm((current) => ({ ...current, network: { ...current.network, ...patch } }));
+  }
+
+  function setMods(patch: Partial<ServerSettings["mods"]>) {
+    setForm((current) => ({ ...current, mods: { ...current.mods, ...patch } }));
+  }
+
+  function applyImmediateSettings(settings: ServerSettings) {
+    mutateSettings({ settings }, false);
+    setForm((current) => ({
+      ...current,
+      mods: {
+        ...current.mods,
+        modBlacklist: settings.mods.modBlacklist,
+      },
+    }));
+  }
 
   async function save() {
     try {
       setSaving(true);
-      const patch: Partial<Instance> = {
-        name: form.name,
-        description: form.description,
-        motd: form.motd,
-        group: form.group,
-        port: Number(form.port),
-        maxPlayers: Number(form.maxPlayers),
-        passwordProtected: form.passwordProtected,
-        publicAdvertised: form.publicAdvertised,
-        resources: { memoryLimitMB: Number(form.memoryLimitMB), cpuLimit: Number(form.cpuLimit) },
-        docker: {
-          ...instance.docker,
-          containerName: form.containerName,
-          image: form.image,
-        },
-        autoRestart: form.autoRestart,
-        autoBackup: form.autoBackup,
-      };
-      await api.instances.update(instance.id, patch);
+      const response = await api.settings.update(id, form);
+      setForm(response.settings);
+      mutateSettings({ settings: response.settings }, false);
+      mutateInstance();
       toast.success("Settings saved");
-      onSaved();
     } catch (e) {
-      toast.error("Failed to save", { description: e instanceof Error ? e.message : undefined });
+      toast.error("Failed to save settings", {
+        description: e instanceof Error ? e.message : undefined,
+      });
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <SectionCard title="General" icon={ServerCogIcon}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Server name">
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
-          </Field>
-          <Field label="Group">
-            <Input value={form.group} onChange={(e) => set("group", e.target.value)} />
-          </Field>
-          <Field label="Description" className="sm:col-span-2">
-            <Textarea
-              value={form.description}
-              onChange={(e) => set("description", e.target.value)}
-              rows={2}
-            />
-          </Field>
-          <Field label="Message of the day (MOTD)" className="sm:col-span-2">
-            <Input value={form.motd} onChange={(e) => set("motd", e.target.value)} />
-          </Field>
-        </div>
-      </SectionCard>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Settings"
+        description="Edit the Vintage Story server config for this instance."
+        icon={SettingsIcon}
+      />
 
-      <SectionCard title="Network & players" icon={NetworkIcon}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={<>Port <RestartHint /></>}>
-            <Input
-              type="number"
-              value={form.port}
-              onChange={(e) => set("port", Number(e.target.value))}
-            />
-          </Field>
-          <Field label="Max players">
-            <Input
-              type="number"
-              value={form.maxPlayers}
-              onChange={(e) => set("maxPlayers", Number(e.target.value))}
-            />
-          </Field>
-        </div>
-      </SectionCard>
+      <Tabs defaultValue="general" className="flex flex-col gap-4">
+        <TabsList className="flex h-auto flex-wrap justify-start gap-1">
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="admin">Admin</TabsTrigger>
+          <TabsTrigger value="world">World</TabsTrigger>
+          <TabsTrigger value="mods">Mods</TabsTrigger>
+          <TabsTrigger value="network">Network</TabsTrigger>
+          <TabsTrigger value="versions">Versions</TabsTrigger>
+        </TabsList>
 
-      <SectionCard title="Access & advertising" icon={LockIcon}>
-        <div className="flex flex-col gap-3">
-          <ToggleRow
-            label="Password protected"
-            description="Require a password to join this server."
-            checked={form.passwordProtected}
-            onChange={(v) => set("passwordProtected", v)}
+        <TabsContent value="general" className="mt-0">
+          <GeneralTab settings={form.general} onChange={setGeneral} />
+        </TabsContent>
+        <TabsContent value="admin" className="mt-0">
+          <AdminTab settings={form.admin} onChange={setAdmin} />
+        </TabsContent>
+        <TabsContent value="world" className="mt-0">
+          <WorldTab settings={form.world} onChange={setWorld} />
+        </TabsContent>
+        <TabsContent value="mods" className="mt-0">
+          <ModsTab
+            id={id}
+            settings={form.mods}
+            onChange={setMods}
+            onImmediateSettings={applyImmediateSettings}
           />
-          <ToggleRow
-            label="Advertise publicly"
-            description="List this server on the public master server list."
-            checked={form.publicAdvertised}
-            onChange={(v) => set("publicAdvertised", v)}
-          />
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Resources" icon={CpuIcon}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={<>Memory limit <RestartHint /></>}>
-            <Select
-              value={String(form.memoryLimitMB)}
-              onValueChange={(v) => set("memoryLimitMB", Number(v))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MEMORY.map((m) => (
-                  <SelectItem key={m} value={String(m)}>
-                    {(m / 1024).toFixed(m % 1024 ? 1 : 0)} GB
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label={<>CPU limit (cores) <RestartHint /></>}>
-            <Input
-              type="number"
-              step="0.5"
-              min="0"
-              value={form.cpuLimit}
-              onChange={(e) => set("cpuLimit", Number(e.target.value))}
-            />
-          </Field>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Docker" icon={ContainerIcon}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Container name">
-            <Input value={form.containerName} onChange={(e) => set("containerName", e.target.value)} className="font-mono text-xs" />
-          </Field>
-          <Field label={<>Image <RestartHint /></>}>
-            <Input value={form.image} onChange={(e) => set("image", e.target.value)} className="font-mono text-xs" />
-          </Field>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Automation" icon={RefreshCwIcon}>
-        <div className="flex flex-col gap-3">
-          <ToggleRow
-            label="Automatic restart"
-            description="Start this server when the panel boots and restart it if it crashes."
-            checked={form.autoRestart}
-            onChange={(v) => set("autoRestart", v)}
-          />
-          <ToggleRow
-            label="Automatic backups"
-            description="Take scheduled nightly backups of the world."
-            checked={form.autoBackup}
-            onChange={(v) => set("autoBackup", v)}
-          />
-        </div>
-      </SectionCard>
+        </TabsContent>
+        <TabsContent value="network" className="mt-0">
+          <NetworkTab settings={form.network} onChange={setNetwork} />
+        </TabsContent>
+        <TabsContent value="versions" className="mt-0">
+          <VersionsTab id={id} instance={instance} onUpdated={mutateInstance} />
+        </TabsContent>
+      </Tabs>
 
       <div className="sticky bottom-3 z-10 flex items-center justify-end gap-3 rounded-xl border border-border bg-card/90 px-4 py-3 shadow-panel backdrop-blur">
         <span className="text-xs text-muted-foreground">
-          {dirty ? "You have unsaved changes" : "All changes saved"}
+          {dirty ? "You have unsaved config changes" : "All config changes saved"}
         </span>
         <Button onClick={save} disabled={!dirty || saving}>
-          {saving ? <Loader2Icon className="animate-spin" /> : <SaveIcon />} Save changes
+          {saving ? <Loader2Icon className="animate-spin" /> : <SaveIcon />} Save
         </Button>
       </div>
     </div>
   );
 }
 
-function VersionUpdate({
+function GeneralTab({
+  settings,
+  onChange,
+}: {
+  settings: ServerSettings["general"];
+  onChange: (patch: Partial<ServerSettings["general"]>) => void;
+}) {
+  return (
+    <SectionCard title="General" icon={ServerCogIcon}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Field label="Server Name">
+          <Input
+            value={settings.serverName}
+            onChange={(e) => onChange({ serverName: e.target.value })}
+          />
+        </Field>
+        <Field label="Max Players">
+          <Input
+            type="number"
+            min="1"
+            value={settings.maxPlayers}
+            onChange={(e) => onChange({ maxPlayers: numberInput(e.target.value, 1) })}
+          />
+        </Field>
+        <Field label="Server Description" className="lg:col-span-2">
+          <Textarea
+            value={settings.serverDescription}
+            onChange={(e) => onChange({ serverDescription: e.target.value })}
+            rows={3}
+            placeholder="VTML is accepted here."
+          />
+        </Field>
+        <Field label="Welcome Message" className="lg:col-span-2">
+          <Textarea
+            value={settings.welcomeMessage}
+            onChange={(e) => onChange({ welcomeMessage: e.target.value })}
+            rows={2}
+          />
+        </Field>
+        <Field label="Password">
+          <Input
+            value={settings.password}
+            onChange={(e) => onChange({ password: e.target.value })}
+            placeholder="Leave empty for no password"
+          />
+        </Field>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        <ToggleRow
+          label="Advertise server"
+          checked={settings.advertiseServer}
+          onChange={(advertiseServer) => onChange({ advertiseServer })}
+        />
+        <ToggleRow
+          label="Pass time when empty"
+          checked={settings.passTimeWhenEmpty}
+          onChange={(passTimeWhenEmpty) => onChange({ passTimeWhenEmpty })}
+        />
+        <ToggleRow
+          label="Whitelist Mode"
+          checked={settings.whitelistMode}
+          onChange={(whitelistMode) => onChange({ whitelistMode })}
+        />
+        <ToggleRow
+          label="Allow PVP"
+          checked={settings.allowPvp}
+          onChange={(allowPvp) => onChange({ allowPvp })}
+        />
+        <ToggleRow
+          label="Allow Fire Spread"
+          checked={settings.allowFireSpread}
+          onChange={(allowFireSpread) => onChange({ allowFireSpread })}
+        />
+        <ToggleRow
+          label="Allow Falling Blocks"
+          checked={settings.allowFallingBlocks}
+          onChange={(allowFallingBlocks) => onChange({ allowFallingBlocks })}
+        />
+      </div>
+    </SectionCard>
+  );
+}
+
+function AdminTab({
+  settings,
+  onChange,
+}: {
+  settings: ServerSettings["admin"];
+  onChange: (patch: Partial<ServerSettings["admin"]>) => void;
+}) {
+  return (
+    <SectionCard title="Admin" icon={ShieldIcon}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Field label="Master Server URL">
+          <Input
+            value={settings.masterServerUrl}
+            onChange={(e) => onChange({ masterServerUrl: e.target.value })}
+          />
+        </Field>
+        <Field label="Mod DB URL">
+          <Input value={settings.modDbUrl} onChange={(e) => onChange({ modDbUrl: e.target.value })} />
+        </Field>
+        <Field label="AntiAbuse level">
+          <Input
+            type="number"
+            min="0"
+            value={settings.antiAbuseLevel}
+            onChange={(e) => onChange({ antiAbuseLevel: numberInput(e.target.value, 0) })}
+          />
+        </Field>
+        <Field label="Max owned group channels per user">
+          <Input
+            type="number"
+            min="0"
+            value={settings.maxOwnedGroupChannelsPerUser}
+            onChange={(e) =>
+              onChange({ maxOwnedGroupChannelsPerUser: numberInput(e.target.value, 1) })
+            }
+          />
+        </Field>
+        <Field label="Number of Land Claims">
+          <Input
+            type="number"
+            min="0"
+            value={settings.numberOfLandClaims}
+            onChange={(e) => onChange({ numberOfLandClaims: numberInput(e.target.value, 1) })}
+          />
+        </Field>
+        <Field label="Chat rate limit ms">
+          <Input
+            type="number"
+            min="0"
+            value={settings.chatRateLimitMs}
+            onChange={(e) => onChange({ chatRateLimitMs: numberInput(e.target.value, 1000) })}
+          />
+        </Field>
+        <Field label="Land Claim Size">
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              type="number"
+              min="0"
+              value={settings.landClaimMinSize}
+              onChange={(e) => onChange({ landClaimMinSize: numberInput(e.target.value, 1) })}
+              aria-label="Minimum land claim size"
+            />
+            <Input
+              type="number"
+              min="0"
+              value={settings.landClaimMaxSize}
+              onChange={(e) => onChange({ landClaimMaxSize: numberInput(e.target.value, 256) })}
+              aria-label="Maximum land claim size"
+            />
+          </div>
+        </Field>
+        <Field label="Die Below Disk Space MB">
+          <Input
+            type="number"
+            min="0"
+            value={settings.dieBelowDiskSpaceMb}
+            onChange={(e) => onChange({ dieBelowDiskSpaceMb: numberInput(e.target.value, 1000) })}
+          />
+        </Field>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        <ToggleRow
+          label="Entity Debug Mode"
+          checked={settings.entityDebugMode}
+          onChange={(entityDebugMode) => onChange({ entityDebugMode })}
+        />
+      </div>
+    </SectionCard>
+  );
+}
+
+function WorldTab({
+  settings,
+  onChange,
+}: {
+  settings: ServerSettings["world"];
+  onChange: (patch: Partial<ServerSettings["world"]>) => void;
+}) {
+  return (
+    <SectionCard title="World" icon={GlobeIcon}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Field label="Max Chunk Radius">
+          <Input
+            type="number"
+            min="1"
+            value={settings.maxChunkRadius}
+            onChange={(e) => onChange({ maxChunkRadius: numberInput(e.target.value, 12) })}
+          />
+        </Field>
+      </div>
+    </SectionCard>
+  );
+}
+
+function NetworkTab({
+  settings,
+  onChange,
+}: {
+  settings: ServerSettings["network"];
+  onChange: (patch: Partial<ServerSettings["network"]>) => void;
+}) {
+  return (
+    <SectionCard title="Network" icon={NetworkIcon}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Field label="Port">
+          <Input
+            type="number"
+            min="1"
+            value={settings.port}
+            onChange={(e) => onChange({ port: numberInput(e.target.value, 42420) })}
+          />
+        </Field>
+        <Field label="Client Connection Timeout">
+          <Input
+            type="number"
+            min="1"
+            value={settings.clientConnectionTimeoutSeconds}
+            onChange={(e) =>
+              onChange({ clientConnectionTimeoutSeconds: numberInput(e.target.value, 360) })
+            }
+          />
+        </Field>
+      </div>
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        <ToggleRow label="UPNP" checked={settings.upnp} onChange={(upnp) => onChange({ upnp })} />
+        <ToggleRow
+          label="Compress Packets"
+          checked={settings.compressPackets}
+          onChange={(compressPackets) => onChange({ compressPackets })}
+        />
+      </div>
+    </SectionCard>
+  );
+}
+
+function ModsTab({
   id,
-  currentStatus,
+  settings,
+  onChange,
+  onImmediateSettings,
+}: {
+  id: string;
+  settings: ServerSettings["mods"];
+  onChange: (patch: Partial<ServerSettings["mods"]>) => void;
+  onImmediateSettings: (settings: ServerSettings) => void;
+}) {
+  function updatePath(index: number, value: string) {
+    onChange({
+      modPaths: settings.modPaths.map((path, i) => (i === index ? value : path)),
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SectionCard title="Mod Paths" icon={WaypointsIcon}>
+        <div className="flex flex-col gap-3">
+          {settings.modPaths.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No extra mod paths configured.</p>
+          ) : (
+            settings.modPaths.map((modPath, index) => (
+              <div key={`${index}-${modPath}`} className="flex gap-2">
+                <Input
+                  value={modPath}
+                  onChange={(e) => updatePath(index, e.target.value)}
+                  className="font-mono text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Remove mod path"
+                  onClick={() =>
+                    onChange({ modPaths: settings.modPaths.filter((_, i) => i !== index) })
+                  }
+                >
+                  <Trash2Icon />
+                </Button>
+              </div>
+            ))
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-fit"
+            onClick={() => onChange({ modPaths: [...settings.modPaths, ""] })}
+          >
+            <PlusIcon /> Add
+          </Button>
+        </div>
+      </SectionCard>
+
+      <ModBlacklistPanel
+        id={id}
+        entries={settings.modBlacklist}
+        onImmediateSettings={onImmediateSettings}
+      />
+    </div>
+  );
+}
+
+function ModBlacklistPanel({
+  id,
+  entries,
+  onImmediateSettings,
+}: {
+  id: string;
+  entries: ModBlacklistEntry[];
+  onImmediateSettings: (settings: ServerSettings) => void;
+}) {
+  const [query, setQuery] = React.useState("");
+  const [debounced, setDebounced] = React.useState("");
+  const [busy, setBusy] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebounced(query.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const search = useSWR(debounced ? ["settings-mod-search", debounced] : null, () =>
+    api.mods.search(debounced),
+  );
+  const blacklistIds = new Set(entries.map((entry) => entry.id));
+
+  async function blacklist(mod: ModSearchResult) {
+    try {
+      setBusy(mod.id);
+      const response = await api.settings.blacklist(id, { op: "blacklist", mod });
+      onImmediateSettings(response.settings);
+      toast.success(`${mod.name} blacklisted`);
+    } catch (e) {
+      toast.error("Failed to blacklist mod", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove(modId: string, name: string) {
+    try {
+      setBusy(modId);
+      const response = await api.settings.blacklist(id, { op: "removeBlacklist", modId });
+      onImmediateSettings(response.settings);
+      toast.success(`${name} removed from blacklist`);
+    } catch (e) {
+      toast.error("Failed to remove mod", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const results = search.data?.results ?? [];
+
+  return (
+    <SectionCard title="Mod Blacklist" icon={BanIcon}>
+      <div className="flex flex-col gap-4">
+        <Field label="Browse Mod Database">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search mods to blacklist..."
+          />
+        </Field>
+
+        {!debounced ? (
+          <BlacklistedMods entries={entries} busy={busy} onRemove={remove} />
+        ) : search.isLoading && !search.data ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-32 rounded-xl" />
+            ))}
+          </div>
+        ) : results.length === 0 ? (
+          <EmptyState icon={PackageSearchIcon} title="No mods found" description="Try another search term." />
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {results.map((result) => {
+              const blacklisted = blacklistIds.has(result.id);
+              return (
+                <ModResultCard
+                  key={result.id}
+                  mod={result}
+                  busy={busy === result.id}
+                  blacklisted={blacklisted}
+                  onBlacklist={() => blacklist(result)}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
+
+function BlacklistedMods({
+  entries,
+  busy,
+  onRemove,
+}: {
+  entries: ModBlacklistEntry[];
+  busy: string | null;
+  onRemove: (id: string, name: string) => void;
+}) {
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        icon={BanIcon}
+        title="No blacklisted mods"
+        description="Search the Mod Database to add client-side mods that should block joins."
+      />
+    );
+  }
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {entries.map((entry) => (
+        <div key={entry.id} className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
+          <ModIcon name={entry.name} src={entry.iconUrl} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-sm font-semibold">{entry.name}</h3>
+              {entry.side && <Badge variant="outline">{entry.side}</Badge>}
+            </div>
+            <p className="truncate text-xs text-muted-foreground">
+              {entry.author ? `by ${entry.author}` : entry.id}
+            </p>
+            {entry.latestVersion && (
+              <p className="mt-1 text-xs text-muted-foreground">Latest v{entry.latestVersion}</p>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onRemove(entry.id, entry.name)}
+            disabled={busy === entry.id}
+          >
+            {busy === entry.id ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}
+            Remove
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ModResultCard({
+  mod,
+  busy,
+  blacklisted,
+  onBlacklist,
+}: {
+  mod: ModSearchResult;
+  busy: boolean;
+  blacklisted: boolean;
+  onBlacklist: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+      <div className="flex items-start gap-3">
+        <ModIcon name={mod.name} src={mod.iconUrl} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-sm font-semibold">{mod.name}</h3>
+            {mod.side && <Badge variant="outline">{mod.side}</Badge>}
+          </div>
+          <p className="truncate text-xs text-muted-foreground">by {mod.author ?? mod.id}</p>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <DownloadIcon className="size-3.5" /> {formatNumber(mod.downloads)}
+        </div>
+      </div>
+      <p className="line-clamp-2 text-xs text-muted-foreground">{mod.summary}</p>
+      <div className="mt-auto flex items-center justify-between gap-2">
+        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+          v{mod.latestVersion}
+        </span>
+        <Button size="sm" onClick={onBlacklist} disabled={blacklisted || busy}>
+          {busy ? <Loader2Icon className="animate-spin" /> : <BanIcon />}
+          {blacklisted ? "Blacklisted" : "Blacklist"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function VersionsTab({
+  id,
+  instance,
   onUpdated,
 }: {
   id: string;
-  currentStatus: string;
+  instance: InstanceWithState;
   onUpdated: () => void;
 }) {
-  const { data } = useSWR(["versions", id], () => api.versions.get(id));
-  const [target, setTarget] = React.useState<string>("");
-  const [busy, setBusy] = React.useState(false);
+  const { data, isLoading } = useSWR(["versions", id], () => api.versions.get(id));
+  const stable = (data?.versions ?? []).filter((version) => version.channel === "stable");
+  const unstable = (data?.versions ?? []).filter((version) => version.channel !== "stable");
+  const [stableTarget, setStableTarget] = React.useState("");
+  const [unstableTarget, setUnstableTarget] = React.useState("");
+  const [busy, setBusy] = React.useState<string | null>(null);
   const { confirm, node } = useConfirm();
 
-  React.useEffect(() => {
-    if (data && !target) setTarget(data.versions.find((v) => v.latest)?.version ?? data.current);
-  }, [data, target]);
+  const selectedStable = stableTarget || stable.find((version) => version.latest)?.version || stable[0]?.version || "";
+  const selectedUnstable = unstableTarget || unstable.find((version) => version.latest)?.version || unstable[0]?.version || "";
 
-  async function update() {
+  async function install(version: string) {
     try {
-      setBusy(true);
-      await api.versions.update(id, target);
-      toast.success(`Updating to Vintage Story ${target}`, {
-        description: "Backing up, replacing files and restarting. Data is preserved.",
+      setBusy(version);
+      await api.versions.update(id, version);
+      toast.success(`Installing Vintage Story ${version}`, {
+        description: "The update workflow backs up, stops, updates and restarts the server.",
       });
       onUpdated();
     } catch (e) {
-      toast.error("Update failed", { description: e instanceof Error ? e.message : undefined });
+      toast.error("Install failed", { description: e instanceof Error ? e.message : undefined });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -319,93 +768,138 @@ function VersionUpdate({
     <>
       {node}
       <SectionCard
-        title="Version & updates"
-        description={data ? `Currently running v${data.current}` : "Loading versions…"}
+        title="Versions"
+        description={data ? `Currently running v${data.current}` : "Loading versions..."}
         icon={DownloadIcon}
       >
-        <div className="flex flex-col gap-4">
-          <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            The update workflow backs up the current server, stops it, downloads the selected
-            package, replaces installation files and restarts — while{" "}
-            <span className="font-medium text-foreground">preserving the data path</span>, saves,
-            configs, mods and player data.
-          </p>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="grid gap-2">
-              <Label>Target version</Label>
-              <Select value={target} onValueChange={(v) => setTarget(v as string)}>
-                <SelectTrigger className="w-56">
-                  <SelectValue placeholder="Select version" />
-                </SelectTrigger>
-                <SelectContent>
-                  {data?.versions.map((v) => (
-                    <SelectItem key={v.version} value={v.version}>
-                      v{v.version}
-                      {v.latest ? " · latest" : v.channel !== "stable" ? ` · ${v.channel}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              disabled={busy || !target || target === data?.current}
-              onClick={() =>
+        {isLoading && !data ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
+          </div>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            <VersionInstaller
+              title="Stable"
+              versions={stable}
+              current={data?.current ?? instance.version}
+              selected={selectedStable}
+              busy={busy}
+              onSelect={setStableTarget}
+              onInstall={(version) =>
                 confirm({
-                  title: `Update to Vintage Story ${target}?`,
+                  title: `Install Vintage Story ${version}?`,
                   description:
-                    "The server will be backed up, stopped, updated and restarted. The data path and world are never deleted.",
-                  confirmLabel: "Back up & update",
-                  onConfirm: update,
+                    "The server will be backed up, stopped, updated and restarted. Saves and data are preserved.",
+                  confirmLabel: "Install",
+                  onConfirm: () => install(version),
                 })
               }
-            >
-              {busy ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
-              {target === data?.current ? "Up to date" : "Update server"}
-            </Button>
-            {currentStatus === "running" && (
-              <span className="text-xs text-muted-foreground">
-                Server will be stopped during the update.
-              </span>
-            )}
+            />
+            <VersionInstaller
+              title="Unstable"
+              versions={unstable}
+              current={data?.current ?? instance.version}
+              selected={selectedUnstable}
+              busy={busy}
+              onSelect={setUnstableTarget}
+              onInstall={(version) =>
+                confirm({
+                  title: `Install Vintage Story ${version}?`,
+                  description:
+                    "Unstable releases may break worlds or mods. A backup will be created before files are replaced.",
+                  confirmLabel: "Install",
+                  onConfirm: () => install(version),
+                })
+              }
+            />
           </div>
-        </div>
+        )}
       </SectionCard>
     </>
   );
 }
 
-function EnvVars({ instance }: { instance: InstanceWithState }) {
-  const vars = [
-    { key: "VS_PORT", value: String(instance.port) },
-    { key: "VS_DATA_PATH", value: instance.dataPath },
-    { key: "VS_MAX_CLIENTS", value: String(instance.maxPlayers) },
-    { key: "DOCKER_NETWORK", value: instance.docker.network },
-    { key: "PANEL_ADMIN_PASSWORD", value: "••••••••", secret: true },
-    { key: "VINTAGE_STORY_ACCOUNT_PASSWORD", value: "••••••••", secret: true },
-  ];
+function VersionInstaller({
+  title,
+  versions,
+  current,
+  selected,
+  busy,
+  onSelect,
+  onInstall,
+}: {
+  title: string;
+  versions: GameVersion[];
+  current: string;
+  selected: string;
+  busy: string | null;
+  onSelect: (version: string) => void;
+  onInstall: (version: string) => void;
+}) {
+  const disabled = versions.length === 0 || !selected || selected === current || busy !== null;
+
   return (
-    <SectionCard
-      title="Environment variables"
-      description="Secrets are stored in the instance .env and never exposed by the panel."
-      icon={KeyRoundIcon}
-      bodyClassName="p-0"
-    >
-      <div className="divide-y divide-border">
-        {vars.map((v) => (
-          <div key={v.key} className="flex items-center gap-3 px-4 py-2.5 font-mono text-xs">
-            <span className="w-64 shrink-0 truncate text-muted-foreground">{v.key}</span>
-            <span className={v.secret ? "text-muted-foreground" : "truncate text-foreground"}>
-              {v.value}
-            </span>
-            {v.secret && (
-              <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] not-italic text-muted-foreground">
-                secret
-              </span>
-            )}
-          </div>
-        ))}
+    <div className="flex flex-col gap-4 rounded-xl border border-border bg-muted/20 p-4">
+      <div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <p className="text-xs text-muted-foreground">
+          {versions.length > 0 ? `${versions.length} available` : "No versions available"}
+        </p>
       </div>
-    </SectionCard>
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label={`${title} version`} className="min-w-56 flex-1">
+          <Select
+            value={selected}
+            onValueChange={(value) => value && onSelect(value)}
+            disabled={versions.length === 0}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select version" />
+            </SelectTrigger>
+            <SelectContent>
+              {versions.map((version) => (
+                <SelectItem key={version.version} value={version.version}>
+                  v{version.version}
+                  {version.latest ? " · latest" : ""}
+                  {version.channel !== "stable" ? ` · ${version.channel}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Button disabled={disabled} onClick={() => onInstall(selected)}>
+          {busy === selected ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
+          {selected === current ? "Installed" : "Install"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ModIcon({ name, src }: { name: string; src?: string }) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  return (
+    <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted text-xs font-semibold text-muted-foreground">
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          className="size-full object-cover"
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+        />
+      ) : (
+        initials || "MOD"
+      )}
+    </div>
   );
 }
 
@@ -419,8 +913,8 @@ function Field({
   className?: string;
 }) {
   return (
-    <div className={`grid gap-2 ${className ?? ""}`}>
-      <Label className="flex items-center">{label}</Label>
+    <div className={cn("grid gap-2", className)}>
+      <Label>{label}</Label>
       {children}
     </div>
   );
@@ -428,22 +922,26 @@ function Field({
 
 function ToggleRow({
   label,
-  description,
   checked,
   onChange,
 }: {
   label: string;
-  description: string;
   checked: boolean;
-  onChange: (v: boolean) => void;
+  onChange: (value: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-3.5 py-3">
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
+    <div className="flex min-h-14 items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 px-3.5 py-3">
+      <p className="text-sm font-medium">{label}</p>
       <Switch checked={checked} onCheckedChange={onChange} />
     </div>
   );
+}
+
+function numberInput(value: string, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function settingsKey(settings: ServerSettings): string {
+  return JSON.stringify(settings);
 }

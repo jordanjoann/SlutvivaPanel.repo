@@ -43,12 +43,13 @@ export function ConfirmDialog({
   const [busy, setBusy] = React.useState(false);
   const [phrase, setPhrase] = React.useState("");
 
-  React.useEffect(() => {
-    if (!open) {
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
       setPhrase("");
       setBusy(false);
     }
-  }, [open]);
+    onOpenChange(nextOpen);
+  }
 
   const phraseOk = !confirmPhrase || phrase.trim() === confirmPhrase;
 
@@ -57,14 +58,14 @@ export function ConfirmDialog({
     try {
       setBusy(true);
       await onConfirm();
-      onOpenChange(false);
+      handleOpenChange(false);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           {destructive && (

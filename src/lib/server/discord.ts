@@ -18,8 +18,15 @@ export function getDiscordStatus(): DiscordStatus {
     channels: [
       { id: "chan-status", name: "#server-status", purpose: "status", enabled: connected },
       { id: "chan-notify", name: "#panel-alerts", purpose: "notifications", enabled: connected },
-      { id: "chan-console", name: "#console-relay", purpose: "console", enabled: false },
+      { id: "chan-admin", name: "#admin", purpose: "admin", enabled: false },
       { id: "chan-chat", name: "#in-game-chat", purpose: "chat", enabled: false },
+    ],
+    routes: [
+      { id: "route-global-chat", channelName: "#global-chat", game: "Vintage Story", server: "Global", kind: "chat" },
+      { id: "route-server-chat", channelName: "#testing-chat", game: "Vintage Story", server: "Testing", kind: "chat" },
+      { id: "route-status", channelName: "#server-status", game: "Vintage Story", server: "Testing", kind: "status" },
+      { id: "route-notifications", channelName: "#server-notifications", game: "Vintage Story", server: "Testing", kind: "notifications" },
+      { id: "route-admin", channelName: "#admin", game: "Vintage Story", server: "Testing", kind: "admin" },
     ],
     notifications: {
       "Server start / stop": connected,
@@ -28,6 +35,7 @@ export function getDiscordStatus(): DiscordStatus {
       "Backup completed": connected,
       "Mod updates available": false,
     },
+    routeCommand: "/sv set #examplechannel {game} {server} {chat|notifications|status|admin}",
     slashCommandsEnabled: connected,
   };
 }

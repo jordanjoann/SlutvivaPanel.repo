@@ -3,13 +3,8 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
-  UsersIcon,
-  BarChart3Icon,
-  SaveIcon,
+  DatabaseBackupIcon,
   MegaphoneIcon,
-  SunIcon,
-  MoonIcon,
-  MessageSquareIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -52,11 +47,7 @@ export function QuickCommands({ id }: { id: string }) {
   }
 
   const direct = [
-    { label: "Players", icon: UsersIcon, cmd: "/list" },
-    { label: "Stats", icon: BarChart3Icon, cmd: "/stats" },
-    { label: "Save world", icon: SaveIcon, cmd: "/saveworld" },
-    { label: "Set day", icon: SunIcon, cmd: "/time set day" },
-    { label: "Set night", icon: MoonIcon, cmd: "/time set night" },
+    { label: "Backup", icon: DatabaseBackupIcon, cmd: "/saveworld" },
   ];
 
   const prompts: (Prompt & { icon: React.ComponentType<{ className?: string }> })[] = [
@@ -66,13 +57,6 @@ export function QuickCommands({ id }: { id: string }) {
       title: "Broadcast announcement",
       placeholder: "Server restarting in 5 minutes…",
       build: (v) => `/announce ${v}`,
-    },
-    {
-      label: "Set MOTD",
-      icon: MessageSquareIcon,
-      title: "Set message of the day",
-      placeholder: "Welcome to the server!",
-      build: (v) => `/setmotd ${v}`,
     },
   ];
 

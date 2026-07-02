@@ -142,7 +142,6 @@ function MetricCards({ host }: { host: HostMetrics }) {
         value={`${host.serversOnline}/${host.serversTotal}`}
         icon={ServerIcon}
         accent="primary"
-        sub="Vintage Story"
       />
       <StatCard
         label="Players"

@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if ("response" in res) return res.response;
     return json({
       current: res.instance.version,
-      versions: listVersions(),
+      versions: await listVersions(),
     });
   } catch (e) {
     return serverError(e);

@@ -1,5 +1,6 @@
 import * as backups from "@/lib/server/backups";
 import { json, ok, badRequest, notFound, serverError, loadInstance } from "@/lib/server/http";
+import type { BackupKind } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,19 +10,26 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function GET(_req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
-    return json({ backups: await backups.listBackups(id) });
+    const res = await loadInstance(id);
+    if ("response" in res) return res.response;
+    await backups.maybeCreateScheduledBackup(res.instance);
+    return json({
+      backups: await backups.listBackups(id),
+      policy: await backups.getBackupPolicyStatus(id, res.instance.autoBackup),
+    });
   } catch (e) {
     return serverError(e);
   }
 }
 
-/** { op: "create"|"delete"|"restore", backupId?, note? } */
+/** { op: "create"|"delete"|"restore", backupId?, kind?, note? } */
 export async function POST(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
     const body = (await req.json()) as {
       op?: string;
       backupId?: string;
+      kind?: BackupKind;
       note?: string;
     };
     const res = await loadInstance(id);
@@ -32,6 +40,7 @@ export async function POST(req: Request, { params }: Ctx) {
         return json(
           await backups.createBackup(id, {
             worldName: res.instance.worldName,
+            kind: isBackupKind(body.kind) ? body.kind : "manual",
             note: body.note,
           }),
         );
@@ -51,4 +60,13 @@ export async function POST(req: Request, { params }: Ctx) {
   } catch (e) {
     return serverError(e);
   }
+}
+
+function isBackupKind(value: unknown): value is BackupKind {
+  return (
+    value === "manual" ||
+    value === "auto" ||
+    value === "pre-update" ||
+    value === "restore-point"
+  );
 }

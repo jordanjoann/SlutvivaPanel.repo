@@ -69,6 +69,8 @@ export interface Instance {
   description?: string;
   /** Free-form grouping label shown in the instance list (e.g. "Main"). */
   group?: string;
+  /** Whether this instance is isolated for development workflows. */
+  development: boolean;
 
   version: string;
   port: number;
@@ -108,6 +110,61 @@ export interface InstanceRuntimeState {
 /** An instance joined with its current runtime state (list/overview payload). */
 export interface InstanceWithState extends Instance {
   state: InstanceRuntimeState;
+}
+
+/* ------------------------------------------------------------------ */
+/* Server settings                                                    */
+/* ------------------------------------------------------------------ */
+
+export interface ModBlacklistEntry {
+  id: string;
+  name: string;
+  author?: string;
+  summary?: string;
+  iconUrl?: string;
+  side?: "Client" | "Server" | "Universal";
+  latestVersion?: string;
+}
+
+export interface ServerSettings {
+  general: {
+    serverName: string;
+    serverDescription: string;
+    welcomeMessage: string;
+    advertiseServer: boolean;
+    maxPlayers: number;
+    passTimeWhenEmpty: boolean;
+    password: string;
+    whitelistMode: boolean;
+    allowPvp: boolean;
+    allowFireSpread: boolean;
+    allowFallingBlocks: boolean;
+  };
+  admin: {
+    entityDebugMode: boolean;
+    masterServerUrl: string;
+    modDbUrl: string;
+    antiAbuseLevel: number;
+    maxOwnedGroupChannelsPerUser: number;
+    numberOfLandClaims: number;
+    landClaimMinSize: number;
+    landClaimMaxSize: number;
+    chatRateLimitMs: number;
+    dieBelowDiskSpaceMb: number;
+  };
+  world: {
+    maxChunkRadius: number;
+  };
+  network: {
+    port: number;
+    upnp: boolean;
+    compressPackets: boolean;
+    clientConnectionTimeoutSeconds: number;
+  };
+  mods: {
+    modPaths: string[];
+    modBlacklist: ModBlacklistEntry[];
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -180,6 +237,7 @@ export interface Player {
   uid: string;
   name: string;
   online: boolean;
+  role?: string;
   pingMs: number;
   playtimeSeconds: number;
   isOp: boolean;
@@ -280,16 +338,33 @@ export interface ModSearchResult {
 /* Backups                                                            */
 /* ------------------------------------------------------------------ */
 
-export type BackupKind = "manual" | "auto" | "pre-update";
+export type BackupKind = "manual" | "auto" | "pre-update" | "restore-point";
 
 export interface Backup {
   id: string;
   name: string;
   kind: BackupKind;
+  /** Logical size of the snapshot if restored. */
   sizeBytes: number;
+  /** New bytes stored by this snapshot after deduplicating unchanged files. */
+  storedBytes?: number;
+  fileCount?: number;
   createdAt: number;
+  expiresAt?: number;
   worldName?: string;
   note?: string;
+}
+
+export interface BackupPolicyStatus {
+  enabled: boolean;
+  intervalMinutes: number;
+  keepRestorePoints: number;
+  restorePoints: number;
+  protectedBackups: number;
+  logicalBytes: number;
+  storedBytes: number;
+  lastRestorePointAt?: number;
+  nextRestorePointAt?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -342,8 +417,18 @@ export interface UpdateProgress {
 export interface DiscordChannel {
   id: string;
   name: string;
-  purpose: "notifications" | "console" | "chat" | "status";
+  purpose: "notifications" | "admin" | "chat" | "status";
   enabled: boolean;
+}
+
+export type DiscordRouteKind = "chat" | "notifications" | "status" | "admin";
+
+export interface DiscordRoute {
+  id: string;
+  channelName: string;
+  game: string;
+  server: string;
+  kind: DiscordRouteKind;
 }
 
 export interface DiscordStatus {
@@ -353,7 +438,9 @@ export interface DiscordStatus {
   guildId?: string;
   latencyMs?: number;
   channels: DiscordChannel[];
+  routes: DiscordRoute[];
   notifications: Record<string, boolean>;
+  routeCommand: string;
   slashCommandsEnabled: boolean;
 }
 

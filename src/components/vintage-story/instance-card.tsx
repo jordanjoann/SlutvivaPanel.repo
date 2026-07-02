@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { UsersIcon, TagIcon, PlugIcon, CpuIcon, MemoryStickIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  UsersIcon,
+  PlugIcon,
+  CpuIcon,
+  MemoryStickIcon,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/panel/status-badge";
 import { PowerControls } from "@/components/panel/power-controls";
 import { cn } from "@/lib/utils";
@@ -20,7 +27,8 @@ export function InstanceCard({ instance }: { instance: InstanceWithState }) {
       <Link
         href={`/vintage-story/${instance.id}`}
         className="absolute inset-0 z-0"
-        aria-label={`Manage ${instance.name}`}
+        aria-hidden="true"
+        tabIndex={-1}
       />
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
@@ -36,9 +44,6 @@ export function InstanceCard({ instance }: { instance: InstanceWithState }) {
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
-            <TagIcon className="size-3.5" /> {instance.group}
-          </span>
           <span className="inline-flex items-center gap-1.5">
             <UsersIcon className="size-3.5" /> {state.playersOnline}/{instance.maxPlayers}
           </span>
@@ -66,9 +71,15 @@ export function InstanceCard({ instance }: { instance: InstanceWithState }) {
 
       <div className="relative z-10 flex items-center justify-between border-t border-border bg-card/50 px-4 py-3">
         <PowerControls id={instance.id} status={state.status} size="sm" showRestart={false} />
-        <span className="text-xs font-medium text-muted-foreground transition-colors group-hover:text-primary">
-          Manage →
-        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          nativeButton={false}
+          render={<Link href={`/vintage-story/${instance.id}`} aria-label={`Manage ${instance.name}`} />}
+        >
+          Manage
+          <ArrowRightIcon />
+        </Button>
       </div>
     </Card>
   );

@@ -13,6 +13,7 @@ import {
   VS_DATA_SUBDIRS,
 } from "./config";
 import { seedInstanceContent, DEMO_INSTANCES } from "./seed";
+import { DEFAULT_VINTAGE_STORY_VERSION } from "@/lib/vintage-story-versions";
 
 /* ------------------------------------------------------------------ */
 /* Defaults & (de)serialization                                       */
@@ -21,13 +22,17 @@ import { seedInstanceContent, DEMO_INSTANCES } from "./seed";
 function withDefaults(partial: Partial<Instance> & { id: string; name: string }): Instance {
   const id = partial.id;
   const now = Date.now();
+  const development =
+    partial.development ??
+    (partial.group === "Development" || id === "development");
   return {
     id,
     name: partial.name,
     game: partial.game ?? "vintage-story",
     description: partial.description ?? "",
-    group: partial.group ?? "Servers",
-    version: partial.version ?? "1.20.7",
+    group: partial.group ?? (development ? "Development" : "Servers"),
+    development,
+    version: partial.version ?? DEFAULT_VINTAGE_STORY_VERSION,
     port: partial.port ?? 42420,
     dataPath: partial.dataPath ?? instanceDataPath(id),
     runtime: partial.runtime ?? "simulated",
@@ -56,7 +61,8 @@ async function readInstance(id: string): Promise<Instance | null> {
   try {
     const raw = await fs.readFile(file, "utf8");
     const parsed = (YAML.parse(raw) ?? {}) as Partial<Instance>;
-    return withDefaults({ ...parsed, id, name: parsed.name ?? id });
+    const inst = withDefaults({ ...parsed, id, name: parsed.name ?? id });
+    return refreshSeededDemoVersion(inst);
   } catch {
     return null;
   }
@@ -66,6 +72,27 @@ async function writeInstance(inst: Instance): Promise<void> {
   await fs.mkdir(instanceDir(inst.id), { recursive: true });
   const yml = YAML.stringify(inst);
   await fs.writeFile(serverYmlPath(inst.id), yml, "utf8");
+}
+
+const SEEDED_DEMO_IDS = new Set(DEMO_INSTANCES.map((inst) => inst.id));
+const STALE_DEMO_VERSIONS = new Set(["1.20.7", "1.20.6", "1.20.5", "1.20.4"]);
+
+async function refreshSeededDemoVersion(inst: Instance): Promise<Instance> {
+  if (
+    !config.demoSeed ||
+    !SEEDED_DEMO_IDS.has(inst.id) ||
+    !STALE_DEMO_VERSIONS.has(inst.version)
+  ) {
+    return inst;
+  }
+
+  const next = {
+    ...inst,
+    version: DEFAULT_VINTAGE_STORY_VERSION,
+    updatedAt: Date.now(),
+  };
+  await writeInstance(next);
+  return next;
 }
 
 /* ------------------------------------------------------------------ */

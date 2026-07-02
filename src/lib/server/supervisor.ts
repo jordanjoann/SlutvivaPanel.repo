@@ -10,6 +10,7 @@ import type { Runtime } from "./runtimes/types";
 import { SimulatedRuntime } from "./runtimes/simulated";
 import { ProcessRuntime } from "./runtimes/process";
 import { DockerRuntime, dockerAvailable } from "./runtimes/docker";
+import { maybeCreateScheduledBackup } from "./backups";
 
 class Supervisor {
   private runtimes = new Map<string, Runtime>();
@@ -56,6 +57,7 @@ class Supervisor {
 
   async getState(inst: Instance): Promise<InstanceRuntimeState> {
     const rt = await this.ensureRuntime(inst);
+    void maybeCreateScheduledBackup(inst).catch(() => {});
     if (rt instanceof DockerRuntime) {
       await rt.refresh();
       await rt.sample();

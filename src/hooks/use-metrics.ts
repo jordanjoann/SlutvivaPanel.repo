@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { useEventStream } from "./use-event-stream";
@@ -24,23 +24,19 @@ export function useHostMetrics() {
     fetcher,
     { revalidateOnFocus: false },
   );
-  const [host, setHost] = useState<HostMetrics | null>(null);
-  const [history, setHistory] = useState<MetricPoint[]>([]);
-
-  useEffect(() => {
-    if (data) {
-      setHost((h) => h ?? data.host);
-      setHistory((hi) => (hi.length ? hi : data.history));
-    }
-  }, [data]);
+  const [liveHost, setLiveHost] = useState<HostMetrics | null>(null);
+  const [liveHistory, setLiveHistory] = useState<MetricPoint[]>([]);
 
   const { connected } = useEventStream("/api/metrics/stream", {
     metrics: (d) => {
       const m = d as HostMetrics;
-      setHost(m);
-      setHistory((prev) => [...prev, toPoint(m)].slice(-120));
+      setLiveHost(m);
+      setLiveHistory((prev) => [...prev, toPoint(m)].slice(-120));
     },
   });
+
+  const host = liveHost ?? data?.host ?? null;
+  const history = liveHistory.length ? liveHistory : data?.history ?? [];
 
   return { host, history, connected };
 }

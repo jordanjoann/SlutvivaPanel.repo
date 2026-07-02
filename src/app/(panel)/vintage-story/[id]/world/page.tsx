@@ -10,7 +10,6 @@ import {
   CopyIcon,
   Trash2Icon,
   SlidersHorizontalIcon,
-  MapIcon,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/panel/page-header";
@@ -18,7 +17,7 @@ import { SectionCard } from "@/components/panel/section-card";
 import { useConfirm } from "@/components/panel/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatBytes, formatDateTime, formatRelative } from "@/lib/format";
+import { formatBytes, formatDateTime } from "@/lib/format";
 
 export default function WorldPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,7 +33,6 @@ export default function WorldPage() {
       {node}
       <PageHeader
         title="World"
-        description="Manage this server's world save, seed and generation settings."
         icon={GlobeIcon}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -82,7 +80,6 @@ export default function WorldPage() {
               <Field label="World type" value={world.worldType} />
               <Field label="Size on disk" value={formatBytes(world.sizeBytes)} />
               <Field label="Created" value={formatDateTime(world.createdAt)} />
-              <Field label="Last played" value={formatRelative(world.lastPlayed)} />
             </dl>
           </SectionCard>
 
@@ -99,20 +96,6 @@ export default function WorldPage() {
                 ))}
               </dl>
             )}
-          </SectionCard>
-
-          <SectionCard
-            title="Map preview"
-            description="A rendered top-down map is coming soon"
-            icon={MapIcon}
-            className="lg:col-span-2"
-          >
-            <div className="bg-grid flex h-56 items-center justify-center rounded-lg border border-dashed border-border">
-              <div className="text-center">
-                <MapIcon className="mx-auto size-8 text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">Map rendering coming soon</p>
-              </div>
-            </div>
           </SectionCard>
         </div>
       )}

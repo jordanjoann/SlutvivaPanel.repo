@@ -15,7 +15,10 @@ export function useEventStream(
 ) {
   const [connected, setConnected] = useState(false);
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  }, [handlers]);
 
   useEffect(() => {
     if (!url || !enabled) return;
@@ -48,7 +51,6 @@ export function useEventStream(
       es?.close();
       setConnected(false);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, enabled]);
 
   return { connected };

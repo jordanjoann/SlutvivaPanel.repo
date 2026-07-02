@@ -155,12 +155,14 @@ export class SimulatedRuntime implements Runtime {
       uid: `sim-${name}`,
       name,
       online: true,
+      role: Math.random() < 0.2 ? "admin" : "member",
       pingMs: Math.round(rand(18, 120)),
       playtimeSeconds: Math.round(rand(600, 90000)),
-      isOp: Math.random() < 0.2,
+      isOp: false,
       isWhitelisted: true,
       lastSeen: Date.now(),
     };
+    p.isOp = p.role === "admin";
     this.players.push(p);
     if (!silent) {
       this.log(`[${ts()}] ${name} joins. Now 1 player(s)`);
@@ -234,7 +236,7 @@ export class SimulatedRuntime implements Runtime {
 
   async sendCommand(command: string) {
     const id = this.instance.id;
-    consoleBus.push(id, `> ${command}`, "command");
+    consoleBus.push(id, command, "command");
     const [cmd, ...args] = command.trim().replace(/^\//, "").split(/\s+/);
     const arg = args.join(" ");
 
@@ -270,6 +272,7 @@ export class SimulatedRuntime implements Runtime {
         const p = this.players.find((x) => x.name.toLowerCase() === arg.toLowerCase());
         if (p) {
           p.isOp = true;
+          p.role = "admin";
           consoleBus.push(id, `Granted operator rights to ${p.name}.`);
         } else consoleBus.push(id, `Player '${arg}' not found.`, "system", "warning");
         break;
@@ -278,8 +281,27 @@ export class SimulatedRuntime implements Runtime {
         const p = this.players.find((x) => x.name.toLowerCase() === arg.toLowerCase());
         if (p) {
           p.isOp = false;
+          p.role = "member";
           consoleBus.push(id, `Removed operator rights from ${p.name}.`);
         } else consoleBus.push(id, `Player '${arg}' not found.`, "system", "warning");
+        break;
+      }
+      case "player": {
+        const [name, subcommand, ...rest] = args;
+        const value = rest.join(" ");
+        const p = this.players.find((x) => x.name.toLowerCase() === name?.toLowerCase());
+        if (subcommand?.toLowerCase() === "role" && value) {
+          if (p) {
+            p.role = value;
+            p.isOp = value === "admin";
+          }
+          consoleBus.push(id, `Set ${name}'s role to ${value}.`);
+        } else if (subcommand?.toLowerCase() === "whitelist" && value) {
+          if (p) p.isWhitelisted = value.toLowerCase() === "on";
+          consoleBus.push(id, `${name} whitelist ${value.toLowerCase() === "on" ? "enabled" : "disabled"}.`);
+        } else {
+          consoleBus.push(id, `Usage: /player <name> role <role> or whitelist <on|off>.`, "system", "warning");
+        }
         break;
       }
       case "kick": {

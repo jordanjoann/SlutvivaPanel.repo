@@ -49,7 +49,6 @@ export const SERVER_TABS = [
   { key: "files", label: "Files", segment: "files" },
   { key: "mods", label: "Mods", segment: "mods" },
   { key: "backups", label: "Backups", segment: "backups" },
-  { key: "performance", label: "Performance", segment: "performance" },
-  { key: "settings", label: "Admin", segment: "settings" },
+  { key: "settings", label: "Settings", segment: "settings" },
   { key: "danger", label: "Danger Zone", segment: "danger", danger: true },
 ] as const;

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { InstalledMod, ModSearchResult } from "@/lib/types";
+import { FALLBACK_VINTAGE_STORY_VERSIONS } from "@/lib/vintage-story-versions";
 import { vsPaths } from "./config";
 import { consoleBus } from "./console-bus";
 
@@ -162,11 +163,198 @@ export async function installFile(
 }
 
 /* ------------------------------------------------------------------ */
-/* Repository (ModDB-style) catalog                                   */
+/* Vintage Story Mod Database                                         */
+/* ------------------------------------------------------------------ */
+
+const MOD_DB_API_BASE = "https://mods.vintagestory.at/api";
+const MOD_DB_RESULT_LIMIT = 24;
+
+interface ModDbListResponse {
+  mods?: ModDbListItem[];
+}
+
+interface ModDbDetailResponse {
+  mod?: ModDbDetail;
+}
+
+interface ModDbListItem {
+  modid?: number | string;
+  assetid?: number | string;
+  downloads?: number | string;
+  follows?: number | string;
+  name?: string;
+  summary?: string;
+  modidstrs?: string[];
+  author?: string;
+  side?: string;
+  logo?: string | null;
+  tags?: string[];
+  lastreleased?: string;
+}
+
+interface ModDbDetail extends ModDbListItem {
+  text?: string;
+  releases?: ModDbRelease[];
+}
+
+interface ModDbRelease {
+  releaseid?: number | string;
+  mainfile?: string;
+  fileid?: number | string;
+  downloads?: number | string;
+  tags?: string[];
+  modidstr?: string;
+  modversion?: string;
+  created?: string;
+}
+
+export async function searchModDatabase(query: string): Promise<ModSearchResult[]> {
+  try {
+    return await fetchModDatabase(query);
+  } catch {
+    return searchCatalog(query);
+  }
+}
+
+async function fetchModDatabase(query: string): Promise<ModSearchResult[]> {
+  const params = new URLSearchParams({
+    orderby: "lastreleased",
+    orderdirection: "desc",
+  });
+  const q = query.trim();
+  if (q) params.set("text", q);
+
+  const list = await fetchJson<ModDbListResponse>(`${MOD_DB_API_BASE}/mods?${params}`);
+  const mods = (list.mods ?? []).slice(0, MOD_DB_RESULT_LIMIT);
+
+  const results = await Promise.all(
+    mods.map(async (mod) => {
+      const id = modId(mod);
+      if (!id) return null;
+
+      try {
+        const detail = await fetchJson<ModDbDetailResponse>(
+          `${MOD_DB_API_BASE}/mod/${encodeURIComponent(id)}`,
+        );
+        return mapModDbResult({ ...mod, ...detail.mod });
+      } catch {
+        return mapModDbResult(mod);
+      }
+    }),
+  );
+
+  return results.filter((result): result is ModSearchResult => result !== null);
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "Slutvival Panel Mod Browser",
+    },
+  });
+  if (!res.ok) throw new Error(`Mod Database request failed: ${res.status}`);
+  return (await res.json()) as T;
+}
+
+function mapModDbResult(mod: ModDbDetail): ModSearchResult | null {
+  const id = modId(mod);
+  const name = mod.name?.trim();
+  if (!id || !name) return null;
+
+  const versions = mapVersions(mod.releases, mod.lastreleased);
+  const latestVersion = versions[0]?.version ?? "latest";
+
+  return {
+    id,
+    name,
+    author: mod.author,
+    summary: mod.summary?.trim() || stripHtml(mod.text) || "No description available.",
+    iconUrl: mod.logo ?? undefined,
+    downloads: toNumber(mod.downloads),
+    follows: toNumber(mod.follows),
+    side: mapSide(mod.side),
+    latestVersion,
+    tags: (mod.tags ?? []).filter(Boolean),
+    versions,
+  };
+}
+
+function mapVersions(releases?: ModDbRelease[], lastReleased?: string): ModSearchResult["versions"] {
+  const mapped = (releases ?? [])
+    .filter((release) => release.modversion)
+    .map((release) => ({
+      version: release.modversion!,
+      releasedAt: parseModDbDate(release.created),
+      gameVersions: release.tags ?? [],
+      downloadUrl: release.mainfile,
+      fileId: release.fileid === undefined ? undefined : String(release.fileid),
+    }));
+
+  if (mapped.length > 0) return mapped;
+
+  return [
+    {
+      version: "latest",
+      releasedAt: parseModDbDate(lastReleased),
+      gameVersions: [],
+    },
+  ];
+}
+
+function modId(mod: ModDbListItem): string | undefined {
+  const id = mod.modidstrs?.find(Boolean) ?? mod.modid;
+  if (id === undefined || id === null) return undefined;
+  return String(id).trim().toLowerCase();
+}
+
+function mapSide(side?: string): ModSearchResult["side"] {
+  switch (side?.toLowerCase()) {
+    case "client":
+      return "Client";
+    case "server":
+      return "Server";
+    case "both":
+      return "Universal";
+    default:
+      return undefined;
+  }
+}
+
+function parseModDbDate(value?: string): number {
+  if (!value) return Date.now();
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const parsed = Date.parse(normalized);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function stripHtml(value?: string): string | undefined {
+  const text = value
+    ?.replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text || undefined;
+}
+
+function toNumber(value?: number | string): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Offline fallback catalog                                           */
 /* ------------------------------------------------------------------ */
 
 const now = Date.now();
 const day = 86400000;
+const FALLBACK_MOD_GAME_VERSIONS = FALLBACK_VINTAGE_STORY_VERSIONS.slice(0, 3).map(
+  (version) => version.version,
+);
 
 export const MOD_CATALOG: ModSearchResult[] = [
   { id: "prospectorinfo", name: "Prospector Info", author: "JakeCool19", summary: "Displays propick reading results as an on-screen overlay.", downloads: 812345, follows: 4210, side: "Universal", latestVersion: "4.7.0", tags: ["QoL", "Prospecting"], versions: v(["4.7.0", "4.6.0", "4.5.0", "4.4.0"]) },
@@ -185,7 +373,7 @@ function v(versions: string[]) {
   return versions.map((version, i) => ({
     version,
     releasedAt: now - (i + 1) * 21 * day,
-    gameVersions: ["1.20.7", "1.20.6", "1.20.4"],
+    gameVersions: FALLBACK_MOD_GAME_VERSIONS,
   }));
 }
 

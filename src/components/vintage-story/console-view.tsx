@@ -14,6 +14,7 @@ import {
 import { api } from "@/lib/api";
 import { useEventStream } from "@/hooks/use-event-stream";
 import { cn } from "@/lib/utils";
+import { QuickCommands } from "@/components/vintage-story/quick-commands";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -36,6 +37,11 @@ const LEVEL_STYLE: Record<LogLevel, string> = {
 
 const LEVELS: LogLevel[] = ["debug", "info", "notification", "warning", "error"];
 const MAX_LINES = 2000;
+
+function displayLineText(line: ConsoleLine): string {
+  if (line.stream !== "command") return line.text;
+  return line.text.replace(/^>\s*/, "");
+}
 
 export function ConsoleView({ id }: { id: string }) {
   const [lines, setLines] = React.useState<ConsoleLine[]>([]);
@@ -79,7 +85,7 @@ export function ConsoleView({ id }: { id: string }) {
   const filtered = React.useMemo(() => {
     const q = search.toLowerCase();
     return lines.filter(
-      (l) => levels.has(l.level) && (!q || l.text.toLowerCase().includes(q)),
+      (l) => levels.has(l.level) && (!q || displayLineText(l).toLowerCase().includes(q)),
     );
   }, [lines, search, levels]);
 
@@ -136,7 +142,7 @@ export function ConsoleView({ id }: { id: string }) {
     <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-2.5">
-        <div className="relative min-w-40 flex-1">
+        <div className="relative w-full min-w-36 sm:w-56 sm:flex-none lg:w-64">
           <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -187,6 +193,7 @@ export function ConsoleView({ id }: { id: string }) {
         >
           <Trash2Icon /> Clear
         </Button>
+        <QuickCommands id={id} />
         <span
           className={cn(
             "flex items-center gap-1.5 rounded-full px-2 py-1 text-xs",
@@ -215,7 +222,9 @@ export function ConsoleView({ id }: { id: string }) {
                 <span className="shrink-0 select-none text-muted-foreground/60">
                   {new Date(l.t).toLocaleTimeString(undefined, { hour12: false })}
                 </span>
-                <span className={cn("min-w-0 flex-1", LEVEL_STYLE[l.level])}>{l.text}</span>
+                <span className={cn("min-w-0 flex-1", LEVEL_STYLE[l.level])}>
+                  {displayLineText(l)}
+                </span>
               </div>
             ))
           )}
@@ -238,7 +247,7 @@ export function ConsoleView({ id }: { id: string }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Type a command and press Enter (↑/↓ for history)…"
+          placeholder="Type a command or message and press Enter"
           className="h-9 flex-1 border-0 bg-transparent font-mono shadow-none focus-visible:ring-0"
           autoComplete="off"
           spellCheck={false}

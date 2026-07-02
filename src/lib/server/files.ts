@@ -1,23 +1,44 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { instanceDir } from "./config";
+import { instanceDataPath } from "./config";
 import type { FileContent, FileNode } from "@/lib/types";
 
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
+const EXCLUDED_SEGMENTS = new Set(["assets", "notes", "readme.md", "server.yml"]);
 
-/** Root of the file manager for an instance (its whole directory). */
+/** Root of the file manager for an instance (the Vintage Story data path). */
 function baseDir(serverId: string): string {
-  return instanceDir(serverId);
+  return instanceDataPath(serverId);
 }
 
-/** Resolve a client-supplied relative path safely inside the instance dir. */
+function normalizeRel(rel: string): string {
+  const parts = rel
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .split("/")
+    .filter(Boolean);
+  if (parts[0]?.toLowerCase() === "vintage") parts.shift();
+  return parts.join("/");
+}
+
+function isExcludedPath(rel: string): boolean {
+  return normalizeRel(rel)
+    .split("/")
+    .filter(Boolean)
+    .some((part) => EXCLUDED_SEGMENTS.has(part.toLowerCase()));
+}
+
+/** Resolve a client-supplied relative path safely inside the Vintage data dir. */
 function resolveSafe(serverId: string, rel: string): string {
   const base = baseDir(serverId);
-  const clean = rel.replace(/^[/\\]+/, "");
+  const clean = normalizeRel(rel);
+  if (isExcludedPath(clean)) {
+    throw new Error("Path is hidden from the file manager");
+  }
   const abs = path.resolve(base, clean);
   const rl = path.relative(base, abs);
   if (rl.startsWith("..") || path.isAbsolute(rl)) {
-    throw new Error("Path escapes instance directory");
+    throw new Error("Path escapes Vintage Story data directory");
   }
   return abs;
 }
@@ -68,6 +89,7 @@ export async function listDir(serverId: string, rel = ""): Promise<FileNode[]> {
   const entries = await fs.readdir(abs, { withFileTypes: true });
   const nodes: FileNode[] = [];
   for (const e of entries) {
+    if (EXCLUDED_SEGMENTS.has(e.name.toLowerCase())) continue;
     const childAbs = path.join(abs, e.name);
     try {
       const st = await fs.stat(childAbs);

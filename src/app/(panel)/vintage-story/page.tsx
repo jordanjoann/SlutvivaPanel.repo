@@ -12,7 +12,7 @@ import type { InstanceWithState } from "@/lib/types";
 export default function VintageStoryPage() {
   const { data: instances, isLoading } = useInstances("vintage-story");
 
-  const groups = groupBy(instances ?? []);
+  const groups = groupInstances(instances ?? []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -59,12 +59,19 @@ export default function VintageStoryPage() {
   );
 }
 
-function groupBy(instances: InstanceWithState[]): [string, InstanceWithState[]][] {
-  const map = new Map<string, InstanceWithState[]>();
-  for (const inst of instances) {
-    const key = inst.group || "Servers";
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(inst);
-  }
-  return [...map.entries()];
+function groupInstances(instances: InstanceWithState[]): [string, InstanceWithState[]][] {
+  const servers = instances.filter((inst) => !isDevelopmentInstance(inst));
+  const development = instances.filter(isDevelopmentInstance);
+  return [
+    ["Servers", servers],
+    ["Development", development],
+  ].filter(([, list]) => list.length > 0) as [string, InstanceWithState[]][];
+}
+
+function isDevelopmentInstance(instance: InstanceWithState): boolean {
+  return (
+    instance.development ||
+    instance.group === "Development" ||
+    instance.id === "development"
+  );
 }

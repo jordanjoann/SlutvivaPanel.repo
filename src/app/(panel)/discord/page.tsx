@@ -4,32 +4,75 @@ import * as React from "react";
 import useSWR from "swr";
 import { toast } from "sonner";
 import {
-  MessagesSquareIcon,
-  BotIcon,
-  HashIcon,
+  ActivityIcon,
   BellIcon,
+  BotIcon,
+  ClipboardIcon,
+  MessageCircleIcon,
+  MessagesSquareIcon,
+  RouteIcon,
+  ShieldAlertIcon,
   SlashSquareIcon,
-  PlugZapIcon,
 } from "lucide-react";
 import { fetcher } from "@/lib/api";
 import { PageHeader } from "@/components/panel/page-header";
 import { SectionCard } from "@/components/panel/section-card";
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import type { DiscordStatus } from "@/lib/types";
+import type { DiscordRouteKind, DiscordStatus } from "@/lib/types";
+
+const routeSections: Array<{
+  kind: DiscordRouteKind;
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  examples: string[];
+}> = [
+  {
+    kind: "chat",
+    title: "Chat",
+    description: "Global and server chat",
+    icon: MessageCircleIcon,
+    examples: [
+      "[ServerName/Global][Role]Username: message text",
+      "[Discord]Username: message text",
+    ],
+  },
+  {
+    kind: "notifications",
+    title: "Notifications",
+    description: "Players, deaths, storms",
+    icon: BellIcon,
+    examples: [
+      "{Username} has joined the server! {playercount/maxplayers}",
+      "A temporal storm is imminent",
+    ],
+  },
+  {
+    kind: "status",
+    title: "Status",
+    description: "Lifecycle output",
+    icon: ActivityIcon,
+    examples: [
+      "{Game}: {ServerName} Restarting in 10 Minutes!",
+      "{Game}: {ServerName} has crashed",
+    ],
+  },
+  {
+    kind: "admin",
+    title: "Admin",
+    description: "Private admin events",
+    icon: ShieldAlertIcon,
+    examples: [
+      "Player and server admin notices",
+      "Ticket and moderation output",
+    ],
+  },
+];
 
 export default function DiscordPage() {
   const { data } = useSWR<DiscordStatus>("/api/discord", fetcher);
-  const [notifications, setNotifications] = React.useState<Record<string, boolean>>({});
-  const [channels, setChannels] = React.useState<Record<string, boolean>>({});
-
-  React.useEffect(() => {
-    if (data) {
-      setNotifications(data.notifications);
-      setChannels(Object.fromEntries(data.channels.map((c) => [c.id, c.enabled])));
-    }
-  }, [data]);
 
   if (!data) {
     return (
@@ -41,15 +84,15 @@ export default function DiscordPage() {
     );
   }
 
+  const copyRouteCommand = async () => {
+    await navigator.clipboard.writeText(data.routeCommand);
+    toast.success("Route command copied");
+  };
+
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Discord"
-        description="Connect a Discord bot to relay status, alerts and console to your server."
-        icon={MessagesSquareIcon}
-      />
+      <PageHeader title="Discord" icon={MessagesSquareIcon} />
 
-      {/* Connection status */}
       <SectionCard>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
@@ -64,7 +107,7 @@ export default function DiscordPage() {
               <BotIcon className="size-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <p className="font-heading text-base font-semibold">
                   {data.connected ? data.botTag : "Bot not connected"}
                 </p>
@@ -79,81 +122,88 @@ export default function DiscordPage() {
                   {data.connected ? "Online" : "Offline"}
                 </span>
               </div>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {data.connected
-                  ? `Connected to ${data.guildName} · ${data.latencyMs}ms`
-                  : "Set DISCORD_TOKEN and DISCORD_GUILD_ID in your .env to connect."}
-              </p>
+              {data.guildName && (
+                <p className="text-sm text-muted-foreground">
+                  {data.guildName} · {data.latencyMs ?? 0} ms
+                </p>
+              )}
             </div>
           </div>
-          {!data.connected && (
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              <PlugZapIcon className="size-4" />
-              Configure credentials to enable integration
-            </div>
-          )}
+          <span
+            className={cn(
+              "w-fit rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset",
+              data.slashCommandsEnabled
+                ? "bg-primary/10 text-primary ring-primary/25"
+                : "bg-muted text-muted-foreground ring-border",
+            )}
+          >
+            /sv {data.slashCommandsEnabled ? "ready" : "disabled"}
+          </span>
         </div>
       </SectionCard>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Channels */}
-        <SectionCard title="Channels" description="Where the bot posts" icon={HashIcon} bodyClassName="p-0">
-          <div className="divide-y divide-border">
-            {data.channels.map((c) => (
-              <div key={c.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{c.name}</p>
-                  <p className="text-xs capitalize text-muted-foreground">{c.purpose}</p>
+      <SectionCard
+        title="Route Command"
+        description="Discord bridge setup"
+        icon={SlashSquareIcon}
+        action={
+          <Button variant="outline" size="sm" onClick={copyRouteCommand}>
+            <ClipboardIcon data-icon="inline-start" />
+            Copy
+          </Button>
+        }
+      >
+        <div className="rounded-md border border-border bg-muted/35 px-3 py-2 font-mono text-sm text-foreground">
+          {data.routeCommand}
+        </div>
+      </SectionCard>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {routeSections.map((section) => {
+          const Icon = section.icon;
+          const routes = data.routes.filter((route) => route.kind === section.kind);
+
+          return (
+            <SectionCard
+              key={section.kind}
+              title={section.title}
+              description={section.description}
+              icon={Icon}
+              bodyClassName="p-0"
+            >
+              <div className="divide-y divide-border">
+                <div className="space-y-2 p-4">
+                  {routes.length > 0 ? (
+                    routes.map((route) => (
+                      <div
+                        key={route.id}
+                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-border bg-background px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{route.channelName}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {route.game} / {route.server}
+                          </p>
+                        </div>
+                        <RouteIcon className="size-4 text-muted-foreground" />
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No route set.</p>
+                  )}
                 </div>
-                <Switch
-                  checked={channels[c.id] ?? false}
-                  disabled={!data.connected}
-                  onCheckedChange={(v) => {
-                    setChannels((s) => ({ ...s, [c.id]: v }));
-                    toast.success(`${c.name} ${v ? "enabled" : "disabled"}`);
-                  }}
-                />
+                <div className="space-y-2 bg-muted/20 p-4">
+                  {section.examples.map((example) => (
+                    <p key={example} className="font-mono text-xs text-muted-foreground">
+                      {example}
+                    </p>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        </SectionCard>
-
-        {/* Notifications */}
-        <SectionCard title="Notifications" description="Events to broadcast" icon={BellIcon} bodyClassName="p-0">
-          <div className="divide-y divide-border">
-            {Object.entries(notifications).map(([label, enabled]) => (
-              <div key={label} className="flex items-center justify-between gap-3 px-4 py-3">
-                <p className="text-sm">{label}</p>
-                <Switch
-                  checked={enabled}
-                  disabled={!data.connected}
-                  onCheckedChange={(v) => {
-                    setNotifications((s) => ({ ...s, [label]: v }));
-                    toast.success(`${label} ${v ? "on" : "off"}`);
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-        </SectionCard>
+            </SectionCard>
+          );
+        })}
       </div>
-
-      {/* Slash commands */}
-      <SectionCard title="Slash commands" description="Control servers from Discord" icon={SlashSquareIcon}>
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            Register <span className="font-mono text-foreground">/start</span>,{" "}
-            <span className="font-mono text-foreground">/stop</span>,{" "}
-            <span className="font-mono text-foreground">/status</span> and{" "}
-            <span className="font-mono text-foreground">/players</span> slash commands in your guild.
-          </p>
-          <Switch
-            checked={data.slashCommandsEnabled}
-            disabled={!data.connected}
-            onCheckedChange={(v) => toast.success(`Slash commands ${v ? "enabled" : "disabled"}`)}
-          />
-        </div>
-      </SectionCard>
     </div>
   );
 }

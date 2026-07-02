@@ -8,6 +8,7 @@ import {
   ZapOffIcon,
   CopyIcon,
   PlugIcon,
+  ClockIcon,
 } from "lucide-react";
 import { useInstance } from "@/hooks/use-instances";
 import { usePower } from "@/hooks/use-power";
@@ -25,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatDuration } from "@/lib/format";
 import { toast } from "sonner";
 
 export default function ServerLayout({ children }: { children: React.ReactNode }) {
@@ -68,10 +70,10 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
                       <PlugIcon className="size-3.5" /> Port {instance.port}
                     </span>
                     <span className="inline-flex items-center gap-1.5">
-                      {instance.state.runtime}
-                      {!instance.state.live && (
-                        <span className="rounded bg-muted px-1 py-0.5 text-[10px]">sim</span>
-                      )}
+                      <ClockIcon className="size-3.5" />
+                      {instance.state.status === "running"
+                        ? `Up ${formatDuration(instance.state.uptimeSeconds)}`
+                        : "Offline"}
                     </span>
                   </div>
                 </div>
