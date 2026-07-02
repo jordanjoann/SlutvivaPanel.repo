@@ -5,7 +5,9 @@ import {
   MANUAL_TTL_MS,
   ROLLING_TTL_MS,
   SYSTEM_DAILY_KEEP,
+  expiresAtForKind,
   selectExpiredGameBackups,
+  selectSystemObjectsToDelete,
   shouldCreateDailyBackup,
   shouldCreateRestorePoint,
 } from "./retention";
@@ -38,13 +40,34 @@ describe("retention", () => {
       backup("daily-3", "auto", now - 1 * 24 * 60 * 60_000),
       backup("manual-old", "manual", now - MANUAL_TTL_MS - 1),
       backup("pre-update-new", "pre-update", now - 60_000),
+      backup("pre-update-old", "pre-update", now - MANUAL_TTL_MS - 1),
     ];
     expect(selectExpiredGameBackups(backups, now).map((b) => b.id).sort()).toEqual([
       "daily-1",
       "manual-old",
+      "pre-update-old",
       "rolling-old",
     ]);
     expect(DAILY_KEEP).toBe(2);
     expect(SYSTEM_DAILY_KEEP).toBe(3);
+  });
+
+  it("selects older system objects beyond the daily retention count", () => {
+    const objects = [
+      { key: "oldest", createdAt: now - 4 },
+      { key: "newest", createdAt: now },
+      { key: "third-newest", createdAt: now - 2 },
+      { key: "fourth-newest", createdAt: now - 3 },
+      { key: "second-newest", createdAt: now - 1 },
+    ];
+
+    expect(selectSystemObjectsToDelete(objects).map((object) => object.key)).toEqual(["fourth-newest", "oldest"]);
+  });
+
+  it("returns expiration timestamps for backup kinds with time-based retention", () => {
+    expect(expiresAtForKind("restore-point", now)).toBe(now + ROLLING_TTL_MS);
+    expect(expiresAtForKind("manual", now)).toBe(now + MANUAL_TTL_MS);
+    expect(expiresAtForKind("pre-update", now)).toBe(now + MANUAL_TTL_MS);
+    expect(expiresAtForKind("auto", now)).toBeUndefined();
   });
 });
