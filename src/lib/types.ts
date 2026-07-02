@@ -368,6 +368,9 @@ export interface Backup {
   expiresAt?: number;
   worldName?: string;
   note?: string;
+  storage?: "local" | "backblaze";
+  status?: "uploaded" | "failed" | "deleted";
+  checksumSha256?: string;
 }
 
 export interface BackupPolicyStatus {
