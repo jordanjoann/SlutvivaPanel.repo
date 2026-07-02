@@ -1,6 +1,7 @@
 import type {
   Backup,
   BackupPolicyStatus,
+  CreateInstanceInput,
   FileContent,
   FileNode,
   GameVersion,
@@ -63,7 +64,7 @@ export const api = {
     list: (game?: string) =>
       fetcher<InstanceWithState[]>(`/api/instances${game ? `?game=${game}` : ""}`),
     get: (id: string) => fetcher<InstanceWithState>(`/api/instances/${id}`),
-    create: (body: Partial<Instance> & { name: string }) =>
+    create: (body: CreateInstanceInput) =>
       send<InstanceWithState>("/api/instances", "POST", body),
     update: (id: string, patch: Partial<Instance>) =>
       send<InstanceWithState>(`/api/instances/${id}`, "PATCH", patch),

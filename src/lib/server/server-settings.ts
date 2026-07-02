@@ -124,10 +124,10 @@ function toSettings(instance: Instance, raw: JsonObject): ServerSettings {
       maxPlayers: numberValue(raw, ["MaxClients"], instance.maxPlayers),
       passTimeWhenEmpty: boolValue(raw, ["PassTimeWhenEmpty"], false),
       password: stringValue(raw, ["Password"], ""),
-      whitelistMode: boolValue(raw, ["OnlyWhitelisted", "WhitelistMode"], false),
-      allowPvp: boolValue(worldConfig, ["AllowPvP", "AllowPVP", "AllowPvp"], true),
-      allowFireSpread: boolValue(worldConfig, ["AllowFireSpread"], true),
-      allowFallingBlocks: boolValue(worldConfig, ["AllowFallingBlocks"], true),
+      whitelistMode: whitelistValue(raw),
+      allowPvp: boolValue(raw, ["AllowPvP", "AllowPVP", "AllowPvp"], boolValue(worldConfig, ["AllowPvP", "AllowPVP", "AllowPvp"], true)),
+      allowFireSpread: boolValue(raw, ["AllowFireSpread"], boolValue(worldConfig, ["AllowFireSpread"], true)),
+      allowFallingBlocks: boolValue(raw, ["AllowFallingBlocks"], boolValue(worldConfig, ["AllowFallingBlocks"], true)),
     },
     admin: {
       entityDebugMode: boolValue(raw, ["EntityDebugMode"], false),
@@ -175,6 +175,10 @@ function applySettings(raw: JsonObject, settings: ServerSettings): JsonObject {
     PassTimeWhenEmpty: settings.general.passTimeWhenEmpty,
     Password: settings.general.password,
     OnlyWhitelisted: settings.general.whitelistMode,
+    WhitelistMode: settings.general.whitelistMode ? 2 : 1,
+    AllowPvP: settings.general.allowPvp,
+    AllowFireSpread: settings.general.allowFireSpread,
+    AllowFallingBlocks: settings.general.allowFallingBlocks,
     EntityDebugMode: settings.admin.entityDebugMode,
     MasterServerUrl: settings.admin.masterServerUrl,
     ModDbUrl: settings.admin.modDbUrl,
@@ -274,6 +278,19 @@ function boolValue(source: JsonObject, keys: string[], fallback: boolean): boole
     if (typeof value === "number") return value !== 0;
   }
   return fallback;
+}
+
+function whitelistValue(source: JsonObject): boolean {
+  const mode = source.WhitelistMode;
+  if (typeof mode === "number") {
+    if (mode === 2) return true;
+    if (mode === 1) return false;
+  }
+  if (typeof mode === "string") {
+    if (mode === "2") return true;
+    if (mode === "1") return false;
+  }
+  return boolValue(source, ["OnlyWhitelisted"], false);
 }
 
 function stringArrayValue(source: JsonObject, keys: string[], fallback: string[]): string[] {

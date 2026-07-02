@@ -1,4 +1,4 @@
-import type { GameId } from "@/lib/types";
+import type { CreateInstanceInput, GameId } from "@/lib/types";
 import { listInstances, createInstance } from "@/lib/server/store";
 import { json, badRequest, serverError, toInstanceWithState } from "@/lib/server/http";
 
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     if (!body.name || typeof body.name !== "string") {
       return badRequest("A server name is required");
     }
-    const created = await createInstance(body as { name: string });
+    const created = await createInstance(body as CreateInstanceInput);
     return json(await toInstanceWithState(created), { status: 201 });
   } catch (e) {
     return serverError(e);

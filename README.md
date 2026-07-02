@@ -42,8 +42,8 @@ cp .env.example .env.local   # fill in secrets (never commit real values)
 npm run dev                  # http://localhost:3000
 ```
 
-On first run the panel seeds four demo instances (Testing, Development, Main, Skyblock)
-so every screen is populated and interactive immediately.
+New installs start with an empty instance list. Create a Vintage Story server from the
+panel when you are ready to write its first-run config.
 
 ```bash
 npm run build && npm start   # production
@@ -72,7 +72,6 @@ Production mirrors the Slutvival infra exactly (configurable via `SLUTVIVAL_ROOT
 ├── server.yml            # instance definition (read/written by the panel)
 ├── docker-compose.yml
 ├── .env
-├── notes/
 └── vintage/              # --dataPath (never deleted on update)
     ├── Mods · Managed-Mods · ModConfig
     ├── Saves · Logs · Backups · BackupSaves

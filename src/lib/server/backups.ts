@@ -46,7 +46,10 @@ interface SnapshotResult {
 const scheduledLocks = new Map<string, Promise<void>>();
 
 function indexPath(serverId: string): string {
-  return path.join(vsPaths(serverId).backups, "index.json");
+  return path.join(
+    /* turbopackIgnore: true */ vsPaths(serverId).backups,
+    "index.json",
+  );
 }
 
 function snapshotRoot(serverId: string): string {
@@ -54,22 +57,30 @@ function snapshotRoot(serverId: string): string {
 }
 
 function manifestsDir(serverId: string): string {
-  return path.join(snapshotRoot(serverId), "manifests");
+  return path.join(
+    /* turbopackIgnore: true */ snapshotRoot(serverId),
+    "manifests",
+  );
 }
 
 function blobsDir(serverId: string): string {
-  return path.join(snapshotRoot(serverId), "blobs");
+  return path.join(/* turbopackIgnore: true */ snapshotRoot(serverId), "blobs");
 }
 
 function manifestPath(serverId: string, backupId: string): string {
-  return path.join(manifestsDir(serverId), `${backupId}.json`);
+  return path.join(
+    /* turbopackIgnore: true */ manifestsDir(serverId),
+    `${backupId}.json`,
+  );
 }
 
 async function readIndex(serverId: string): Promise<Backup[]> {
   const file = indexPath(serverId);
-  if (!existsSync(file)) return [];
+  if (!existsSync(/* turbopackIgnore: true */ file)) return [];
   try {
-    return JSON.parse(await fs.readFile(file, "utf8")) as Backup[];
+    return JSON.parse(
+      await fs.readFile(/* turbopackIgnore: true */ file, "utf8"),
+    ) as Backup[];
   } catch {
     return [];
   }
@@ -77,8 +88,14 @@ async function readIndex(serverId: string): Promise<Backup[]> {
 
 async function writeIndex(serverId: string, backups: Backup[]) {
   const file = indexPath(serverId);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(backups, null, 2), "utf8");
+  await fs.mkdir(/* turbopackIgnore: true */ path.dirname(file), {
+    recursive: true,
+  });
+  await fs.writeFile(
+    /* turbopackIgnore: true */ file,
+    JSON.stringify(backups, null, 2),
+    "utf8",
+  );
 }
 
 export async function listBackups(serverId: string): Promise<Backup[]> {
@@ -111,14 +128,19 @@ export async function getBackupPolicyStatus(
   };
 }
 
-export async function maybeCreateScheduledBackup(inst: Instance): Promise<void> {
+export async function maybeCreateScheduledBackup(
+  inst: Instance,
+  onCreated?: (backup: Backup) => Promise<void> | void,
+): Promise<void> {
   if (!inst.autoBackup) return;
   const existing = scheduledLocks.get(inst.id);
   if (existing) return existing;
 
   const task = (async () => {
-    await maybeCreateRestorePoint(inst);
-    await maybeCreateDailyBackup(inst);
+    const restorePoint = await maybeCreateRestorePoint(inst);
+    if (restorePoint) await onCreated?.(restorePoint);
+    const dailyBackup = await maybeCreateDailyBackup(inst);
+    if (dailyBackup) await onCreated?.(dailyBackup);
   })().finally(() => {
     scheduledLocks.delete(inst.id);
   });
@@ -127,29 +149,29 @@ export async function maybeCreateScheduledBackup(inst: Instance): Promise<void> 
   return task;
 }
 
-async function maybeCreateRestorePoint(inst: Instance): Promise<void> {
+async function maybeCreateRestorePoint(inst: Instance): Promise<Backup | null> {
   const backups = await readIndex(inst.id);
   const latest = backups
       .filter((b) => b.kind === "restore-point")
       .sort((a, b) => b.createdAt - a.createdAt)[0];
-  if (latest && Date.now() - latest.createdAt < ROLLING_INTERVAL_MS) return;
+  if (latest && Date.now() - latest.createdAt < ROLLING_INTERVAL_MS) return null;
 
-  await createBackup(inst.id, {
+  return createBackup(inst.id, {
     worldName: inst.worldName,
     kind: "restore-point",
     note: "Hourly rolling restore point",
   });
 }
 
-async function maybeCreateDailyBackup(inst: Instance): Promise<void> {
+async function maybeCreateDailyBackup(inst: Instance): Promise<Backup | null> {
   const backups = await readIndex(inst.id);
   const today = dayKey(Date.now());
   const hasToday = backups.some(
     (backup) => isRotatingDailyBackup(backup) && dayKey(backup.createdAt) === today,
   );
-  if (hasToday) return;
+  if (hasToday) return null;
 
-  await createRotatingDailyBackup(inst);
+  return createRotatingDailyBackup(inst);
 }
 
 async function createRotatingDailyBackup(inst: Instance): Promise<Backup> {
@@ -159,7 +181,9 @@ async function createRotatingDailyBackup(inst: Instance): Promise<Backup> {
   const backups = await readIndex(inst.id);
   const next = backups.filter((backup) => backup.id !== id);
 
-  await fs.rm(manifestPath(inst.id, id), { force: true });
+  await fs.rm(/* turbopackIgnore: true */ manifestPath(inst.id, id), {
+    force: true,
+  });
   const snapshot = await createSnapshot(inst.id, id, now);
   const backup: Backup = {
     id,
@@ -219,7 +243,9 @@ export async function deleteBackup(
   const next = backups.filter((b) => b.id !== id);
   if (next.length === backups.length) return false;
 
-  await fs.rm(manifestPath(serverId, id), { force: true });
+  await fs.rm(/* turbopackIgnore: true */ manifestPath(serverId, id), {
+    force: true,
+  });
   await writeIndex(serverId, next);
   await garbageCollectBlobs(serverId, next);
   consoleBus.push(serverId, `Backup '${id}' deleted.`, "system");
@@ -255,8 +281,12 @@ async function createSnapshot(
   backupId: string,
   createdAt: number,
 ): Promise<SnapshotResult> {
-  await fs.mkdir(manifestsDir(serverId), { recursive: true });
-  await fs.mkdir(blobsDir(serverId), { recursive: true });
+  await fs.mkdir(/* turbopackIgnore: true */ manifestsDir(serverId), {
+    recursive: true,
+  });
+  await fs.mkdir(/* turbopackIgnore: true */ blobsDir(serverId), {
+    recursive: true,
+  });
 
   const files = await collectSnapshotFiles(serverId);
   const manifestFiles: SnapshotFile[] = [];
@@ -264,13 +294,17 @@ async function createSnapshot(
   let storedBytes = 0;
 
   for (const file of files) {
-    const stat = await fs.stat(file.source);
+    const stat = await fs.stat(/* turbopackIgnore: true */ file.source);
     const hash = await hashFile(file.source);
-    const blob = path.join(blobsDir(serverId), hash);
+    const blob = path.join(/* turbopackIgnore: true */ blobsDir(serverId), hash);
     logicalBytes += stat.size;
 
     try {
-      await fs.copyFile(file.source, blob, constants.COPYFILE_EXCL);
+      await fs.copyFile(
+        /* turbopackIgnore: true */ file.source,
+        /* turbopackIgnore: true */ blob,
+        constants.COPYFILE_EXCL,
+      );
       storedBytes += stat.size;
     } catch (e) {
       if (!isNodeError(e) || e.code !== "EEXIST") throw e;
@@ -290,7 +324,7 @@ async function createSnapshot(
     files: manifestFiles,
   };
   await fs.writeFile(
-    manifestPath(serverId, backupId),
+    /* turbopackIgnore: true */ manifestPath(serverId, backupId),
     JSON.stringify(manifest, null, 2),
     "utf8",
   );
@@ -309,9 +343,9 @@ async function collectSnapshotFiles(
   const files: Array<{ source: string; relative: string }> = [];
 
   for (const entry of SNAPSHOT_ENTRIES) {
-    const source = path.join(dataRoot, entry);
-    if (!existsSync(source)) continue;
-    const stat = await fs.stat(source);
+    const source = path.join(/* turbopackIgnore: true */ dataRoot, entry);
+    if (!existsSync(/* turbopackIgnore: true */ source)) continue;
+    const stat = await fs.stat(/* turbopackIgnore: true */ source);
     if (stat.isDirectory()) {
       await walkSnapshotDir(source, entry, files);
     } else if (stat.isFile()) {
@@ -327,9 +361,11 @@ async function walkSnapshotDir(
   relativeDir: string,
   out: Array<{ source: string; relative: string }>,
 ) {
-  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  const entries = await fs
+    .readdir(/* turbopackIgnore: true */ dir, { withFileTypes: true })
+    .catch(() => []);
   for (const entry of entries) {
-    const source = path.join(dir, entry.name);
+    const source = path.join(/* turbopackIgnore: true */ dir, entry.name);
     const relative = path.posix.join(toBackupPath(relativeDir), entry.name);
     if (entry.isDirectory()) {
       await walkSnapshotDir(source, relative, out);
@@ -340,22 +376,41 @@ async function walkSnapshotDir(
 }
 
 async function restoreSnapshot(serverId: string, manifest: SnapshotManifest) {
-  const dataRoot = path.resolve(vsPaths(serverId).data);
+  const dataRoot = path.resolve(/* turbopackIgnore: true */ vsPaths(serverId).data);
 
   for (const entry of SNAPSHOT_ENTRIES) {
-    await fs.rm(path.join(dataRoot, entry), { recursive: true, force: true });
+    await fs.rm(
+      /* turbopackIgnore: true */ path.join(
+        /* turbopackIgnore: true */ dataRoot,
+        entry,
+      ),
+      {
+        recursive: true,
+        force: true,
+      },
+    );
   }
 
   for (const file of manifest.files) {
     const target = safeDataPath(dataRoot, file.path);
-    const blob = path.join(blobsDir(serverId), file.hash);
-    if (!existsSync(blob)) {
+    const blob = path.join(
+      /* turbopackIgnore: true */ blobsDir(serverId),
+      file.hash,
+    );
+    if (!existsSync(/* turbopackIgnore: true */ blob)) {
       throw new Error(`Backup blob missing for ${file.path}`);
     }
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.copyFile(blob, target);
+    await fs.mkdir(/* turbopackIgnore: true */ path.dirname(target), {
+      recursive: true,
+    });
+    await fs.copyFile(
+      /* turbopackIgnore: true */ blob,
+      /* turbopackIgnore: true */ target,
+    );
     const mtime = new Date(file.mtimeMs);
-    await fs.utimes(target, mtime, mtime).catch(() => {});
+    await fs
+      .utimes(/* turbopackIgnore: true */ target, mtime, mtime)
+      .catch(() => {});
   }
 }
 
@@ -364,9 +419,11 @@ async function readManifest(
   backupId: string,
 ): Promise<SnapshotManifest | null> {
   const file = manifestPath(serverId, backupId);
-  if (!existsSync(file)) return null;
+  if (!existsSync(/* turbopackIgnore: true */ file)) return null;
   try {
-    return JSON.parse(await fs.readFile(file, "utf8")) as SnapshotManifest;
+    return JSON.parse(
+      await fs.readFile(/* turbopackIgnore: true */ file, "utf8"),
+    ) as SnapshotManifest;
   } catch {
     return null;
   }
@@ -385,7 +442,11 @@ async function pruneRestorePoints(serverId: string) {
 
   const next = backups.filter((b) => b.kind !== "restore-point" || keep.has(b.id));
   await Promise.all(
-    pruned.map((b) => fs.rm(manifestPath(serverId, b.id), { force: true })),
+    pruned.map((b) =>
+      fs.rm(/* turbopackIgnore: true */ manifestPath(serverId, b.id), {
+        force: true,
+      }),
+    ),
   );
   await writeIndex(serverId, next);
   await garbageCollectBlobs(serverId, next);
@@ -399,32 +460,50 @@ async function garbageCollectBlobs(serverId: string, backups: Backup[]) {
   }
 
   const dir = blobsDir(serverId);
-  const entries = await fs.readdir(dir).catch(() => []);
+  const entries = await fs
+    .readdir(/* turbopackIgnore: true */ dir)
+    .catch(() => []);
   await Promise.all(
     entries
       .filter((entry) => !referenced.has(entry))
-      .map((entry) => fs.rm(path.join(dir, entry), { force: true })),
+      .map((entry) =>
+        fs.rm(
+          /* turbopackIgnore: true */ path.join(
+            /* turbopackIgnore: true */ dir,
+            entry,
+          ),
+          {
+            force: true,
+          },
+        ),
+      ),
   );
 }
 
 async function hashFile(file: string): Promise<string> {
   const hash = createHash("sha256");
-  for await (const chunk of createReadStream(file)) {
+  for await (const chunk of createReadStream(/* turbopackIgnore: true */ file)) {
     hash.update(chunk);
   }
   return hash.digest("hex");
 }
 
 async function dirSize(dir: string): Promise<number> {
-  const stat = await fs.stat(dir).catch(() => null);
+  const stat = await fs
+    .stat(/* turbopackIgnore: true */ dir)
+    .catch(() => null);
   if (!stat) return 0;
   if (stat.isFile()) return stat.size;
   if (!stat.isDirectory()) return 0;
 
-  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  const entries = await fs
+    .readdir(/* turbopackIgnore: true */ dir, { withFileTypes: true })
+    .catch(() => []);
   let total = 0;
   for (const entry of entries) {
-    total += await dirSize(path.join(dir, entry.name));
+    total += await dirSize(
+      path.join(/* turbopackIgnore: true */ dir, entry.name),
+    );
   }
   return total;
 }

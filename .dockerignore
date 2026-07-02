@@ -1,0 +1,9 @@
+node_modules
+.next
+.env
+.env.local
+.slutvival-data
+npm-debug.log*
+Dockerfile*
+README.md
+

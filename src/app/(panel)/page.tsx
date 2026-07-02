@@ -17,6 +17,7 @@ import { StatCard } from "@/components/panel/stat-card";
 import { SectionCard } from "@/components/panel/section-card";
 import { AreaGraph } from "@/components/charts/area-graph";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { formatMB, formatNumber, formatPercent } from "@/lib/format";
 import type { HostMetrics } from "@/lib/types";
@@ -90,7 +91,7 @@ export default function DashboardPage() {
         <SectionCard title="Per-core CPU" description="Load across logical cores" icon={ActivityIcon} className="lg:col-span-1">
           {host ? <PerCore cores={host.perCore} /> : <Skeleton className="h-40 w-full" />}
         </SectionCard>
-        <SectionCard title="Top processes" description="Highest CPU consumers" icon={CpuIcon} className="lg:col-span-1">
+        <SectionCard title="Processes" description="Highest memory and CPU consumers" icon={CpuIcon} className="lg:col-span-1" bodyClassName="p-0">
           {host ? <TopProcesses host={host} /> : <Skeleton className="h-40 w-full" />}
         </SectionCard>
         <SectionCard title="Docker containers" description="Per-server resource usage" icon={ContainerIcon} className="lg:col-span-1">
@@ -191,19 +192,30 @@ function PerCore({ cores }: { cores: number[] }) {
 }
 
 function TopProcesses({ host }: { host: HostMetrics }) {
+  if (host.topProcesses.length === 0) {
+    return <p className="px-4 py-6 text-center text-sm text-muted-foreground">No process data.</p>;
+  }
+
   return (
-    <div className="flex flex-col gap-1">
-      {host.topProcesses.map((p) => (
-        <div key={p.pid} className="flex items-center gap-3 rounded-md px-1 py-1.5 text-sm">
-          <span className="w-10 shrink-0 font-mono text-xs text-muted-foreground">{p.pid}</span>
-          <span className="flex-1 truncate">{p.name}</span>
-          <span className="w-14 text-right text-xs tabular-nums text-muted-foreground">
-            {formatMB(p.memoryMB, 0)}
-          </span>
-          <span className="w-12 text-right text-xs font-medium tabular-nums">{p.cpuPercent}%</span>
-        </div>
-      ))}
-    </div>
+    <ScrollArea className="h-80">
+      <div className="flex flex-col divide-y divide-border">
+        {host.topProcesses.map((p) => (
+          <div key={p.pid} className="grid grid-cols-[3.75rem_minmax(0,1fr)_3.75rem_3.25rem] items-center gap-3 px-4 py-2.5 text-sm">
+            <span className="font-mono text-xs text-muted-foreground tabular-nums">{p.pid}</span>
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{p.name}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {p.command && p.command !== p.name ? p.command : p.user ?? p.state ?? "process"}
+              </span>
+            </span>
+            <span className="text-right text-xs tabular-nums text-muted-foreground">
+              {formatMB(p.memoryMB, 0)}
+            </span>
+            <span className="text-right text-xs font-medium tabular-nums">{p.cpuPercent}%</span>
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
   );
 }
 

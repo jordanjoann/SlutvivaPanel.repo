@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    return json(getDiscordStatus());
+    return json(await getDiscordStatus());
   } catch (e) {
     return serverError(e);
   }

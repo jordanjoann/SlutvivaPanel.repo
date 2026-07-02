@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { nanoid } from "nanoid";
-import type { GameId, Instance } from "@/lib/types";
+import type { CreateInstanceInput, GameId, Instance } from "@/lib/types";
 import {
   config,
   instanceDir,
@@ -12,8 +12,9 @@ import {
   vsPaths,
   VS_DATA_SUBDIRS,
 } from "./config";
-import { seedInstanceContent, DEMO_INSTANCES } from "./seed";
+import { seedInstanceContent } from "./seed";
 import { DEFAULT_VINTAGE_STORY_VERSION } from "@/lib/vintage-story-versions";
+import { ensureInstanceDockerFiles, normalizeDockerImage } from "./provisioning";
 
 /* ------------------------------------------------------------------ */
 /* Defaults & (de)serialization                                       */
@@ -25,6 +26,11 @@ function withDefaults(partial: Partial<Instance> & { id: string; name: string })
   const development =
     partial.development ??
     (partial.group === "Development" || id === "development");
+  const docker = partial.docker ?? {
+    containerName: `vs-${id}`,
+    image: config.docker.image,
+    network: config.docker.network,
+  };
   return {
     id,
     name: partial.name,
@@ -35,11 +41,11 @@ function withDefaults(partial: Partial<Instance> & { id: string; name: string })
     version: partial.version ?? DEFAULT_VINTAGE_STORY_VERSION,
     port: partial.port ?? 42420,
     dataPath: partial.dataPath ?? instanceDataPath(id),
-    runtime: partial.runtime ?? "simulated",
-    docker: partial.docker ?? {
-      containerName: `vs-${id}`,
-      image: config.docker.image,
-      network: config.docker.network,
+    runtime: normalizeRuntime(partial.runtime),
+    docker: {
+      containerName: docker.containerName ?? `vs-${id}`,
+      image: normalizeDockerImage(docker.image),
+      network: docker.network ?? config.docker.network,
     },
     resources: partial.resources ?? { memoryLimitMB: 4096, cpuLimit: 2 },
     motd: partial.motd ?? "Welcome to the server!",
@@ -62,7 +68,7 @@ async function readInstance(id: string): Promise<Instance | null> {
     const raw = await fs.readFile(file, "utf8");
     const parsed = (YAML.parse(raw) ?? {}) as Partial<Instance>;
     const inst = withDefaults({ ...parsed, id, name: parsed.name ?? id });
-    return refreshSeededDemoVersion(inst);
+    return refreshLegacyInstance(inst, parsed);
   } catch {
     return null;
   }
@@ -74,25 +80,17 @@ async function writeInstance(inst: Instance): Promise<void> {
   await fs.writeFile(serverYmlPath(inst.id), yml, "utf8");
 }
 
-const SEEDED_DEMO_IDS = new Set(DEMO_INSTANCES.map((inst) => inst.id));
-const STALE_DEMO_VERSIONS = new Set(["1.20.7", "1.20.6", "1.20.5", "1.20.4"]);
-
-async function refreshSeededDemoVersion(inst: Instance): Promise<Instance> {
-  if (
-    !config.demoSeed ||
-    !SEEDED_DEMO_IDS.has(inst.id) ||
-    !STALE_DEMO_VERSIONS.has(inst.version)
-  ) {
+async function refreshLegacyInstance(
+  inst: Instance,
+  parsed: Partial<Instance>,
+): Promise<Instance> {
+  const parsedImage = parsed.docker?.image;
+  if (parsed.runtime === inst.runtime && parsedImage === inst.docker.image) {
     return inst;
   }
-
-  const next = {
-    ...inst,
-    version: DEFAULT_VINTAGE_STORY_VERSION,
-    updatedAt: Date.now(),
-  };
-  await writeInstance(next);
-  return next;
+  await writeInstance(inst);
+  await ensureInstanceDockerFiles(inst);
+  return inst;
 }
 
 /* ------------------------------------------------------------------ */
@@ -102,7 +100,6 @@ async function refreshSeededDemoVersion(inst: Instance): Promise<Instance> {
 export async function ensureInstanceDirs(id: string): Promise<void> {
   const dir = instanceDir(id);
   await fs.mkdir(dir, { recursive: true });
-  await fs.mkdir(path.join(dir, "notes"), { recursive: true });
   const data = instanceDataPath(id);
   await fs.mkdir(data, { recursive: true });
   for (const sub of VS_DATA_SUBDIRS) {
@@ -111,25 +108,15 @@ export async function ensureInstanceDirs(id: string): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ */
-/* Seeding                                                            */
+/* Initialization                                                     */
 /* ------------------------------------------------------------------ */
 
 let seeded = false;
 
-async function seedIfNeeded(): Promise<void> {
+async function initializeIfNeeded(): Promise<void> {
   if (seeded) return;
   seeded = true;
   await fs.mkdir(config.vintageStoryRoot, { recursive: true });
-  const entries = await fs.readdir(config.vintageStoryRoot).catch(() => []);
-  const hasAny = entries.some((e) => existsSync(serverYmlPath(e)));
-  if (hasAny || !config.demoSeed) return;
-
-  for (const demo of DEMO_INSTANCES) {
-    const inst = withDefaults(demo);
-    await ensureInstanceDirs(inst.id);
-    await writeInstance(inst);
-    await seedInstanceContent(inst);
-  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -137,7 +124,7 @@ async function seedIfNeeded(): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 export async function listInstances(game?: GameId): Promise<Instance[]> {
-  await seedIfNeeded();
+  await initializeIfNeeded();
   const dirs = await fs.readdir(config.vintageStoryRoot).catch(() => []);
   const out: Instance[] = [];
   for (const id of dirs) {
@@ -149,14 +136,14 @@ export async function listInstances(game?: GameId): Promise<Instance[]> {
 }
 
 export async function getInstance(id: string): Promise<Instance | null> {
-  await seedIfNeeded();
+  await initializeIfNeeded();
   return readInstance(id);
 }
 
 export async function createInstance(
-  input: Partial<Instance> & { name: string },
+  input: CreateInstanceInput,
 ): Promise<Instance> {
-  await seedIfNeeded();
+  await initializeIfNeeded();
   const id = input.id ?? slugId(input.name);
   const used = await listInstances();
   const port =
@@ -165,6 +152,7 @@ export async function createInstance(
     ...input,
     id,
     port,
+    autoRestart: false,
     dataPath: instanceDataPath(id),
     docker: {
       containerName: `vs-${id}`,
@@ -174,7 +162,8 @@ export async function createInstance(
   });
   await ensureInstanceDirs(id);
   await writeInstance(inst);
-  await seedInstanceContent(inst);
+  await ensureInstanceDockerFiles(inst);
+  await seedInstanceContent(inst, input);
   return inst;
 }
 
@@ -193,6 +182,7 @@ export async function updateInstance(
     updatedAt: Date.now(),
   };
   await writeInstance(next);
+  await ensureInstanceDockerFiles(next);
   return next;
 }
 
@@ -212,6 +202,13 @@ function slugId(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 32);
   return base ? `${base}-${nanoid(4).toLowerCase()}` : nanoid(8).toLowerCase();
+}
+
+function normalizeRuntime(runtime?: Instance["runtime"]): Instance["runtime"] {
+  if (config.preferredRuntime === "simulated") return "simulated";
+  if (config.preferredRuntime === "process") return "process";
+  if (runtime === "process") return "process";
+  return "docker";
 }
 
 export { vsPaths };

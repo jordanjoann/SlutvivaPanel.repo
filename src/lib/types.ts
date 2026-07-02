@@ -6,6 +6,8 @@
  * no Date objects — use epoch milliseconds (number) for timestamps.
  */
 
+import type { VintageStoryWorldGenerationConfig } from "./vintage-story-world";
+
 /* ------------------------------------------------------------------ */
 /* Games                                                              */
 /* ------------------------------------------------------------------ */
@@ -14,6 +16,10 @@ export type GameId =
   | "vintage-story"
   | "gta"
   | "abiotic-factor"
+  | "project-zomboid"
+  | "garrys-mod"
+  | "palworld"
+  | "seven-days-to-die"
   | "minecraft"
   | "terraria";
 
@@ -94,6 +100,12 @@ export interface Instance {
 
   createdAt: number;
   updatedAt: number;
+}
+
+export interface CreateInstanceInput extends Partial<Instance> {
+  name: string;
+  serverPassword?: string;
+  initialWorldConfig?: Partial<VintageStoryWorldGenerationConfig>;
 }
 
 /** Live, non-persisted runtime facts about an instance. */
@@ -192,6 +204,9 @@ export interface MetricPoint {
 export interface HostProcess {
   pid: number;
   name: string;
+  command?: string;
+  user?: string;
+  state?: string;
   cpuPercent: number;
   memoryMB: number;
 }

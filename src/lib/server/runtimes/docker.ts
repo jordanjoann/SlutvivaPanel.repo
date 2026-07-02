@@ -4,6 +4,14 @@ import type { Instance, Player, ServerStats, ServerStatus } from "@/lib/types";
 import { config } from "../config";
 import { consoleBus } from "../console-bus";
 import type { Runtime } from "./types";
+import {
+  dockerCommand,
+  dockerMounts,
+  ensureInstanceDockerFiles,
+  ensureServerInstalled,
+  normalizeDockerImage,
+} from "../provisioning";
+import { ensureRunnableServerConfig } from "../seed";
 
 let dockerClient: Docker | null = null;
 function docker(): Docker {
@@ -20,6 +28,23 @@ export async function dockerAvailable(): Promise<boolean> {
     return false;
   }
 }
+
+type DockerInspect = {
+  State: {
+    Running: boolean;
+    Restarting?: boolean;
+    StartedAt?: string;
+  };
+  Config: {
+    Image?: string;
+    Cmd?: string[];
+  };
+  HostConfig: {
+    Binds?: string[];
+    NetworkMode?: string;
+    PortBindings?: Record<string, Array<{ HostPort?: string }>>;
+  };
+};
 
 /**
  * Supervises an instance running as a docker container on the
@@ -55,6 +80,10 @@ export class DockerRuntime implements Runtime {
     return docker().getContainer(this.instance.docker.containerName);
   }
 
+  private image() {
+    return normalizeDockerImage(this.instance.docker.image);
+  }
+
   getStatus() {
     return this.status;
   }
@@ -66,13 +95,17 @@ export class DockerRuntime implements Runtime {
 
   async refresh() {
     try {
-      const info = await this.container().inspect();
-      this.status = info.State.Running ? "running" : "stopped";
+      const info = (await this.container().inspect()) as DockerInspect;
+      this.status = info.State.Restarting
+        ? "starting"
+        : info.State.Running
+          ? "running"
+          : "stopped";
       if (info.State.StartedAt)
         this.startedAt = new Date(info.State.StartedAt).getTime();
       if (info.State.Running && !this.logStream) await this.attachLogs();
-    } catch {
-      this.status = "unknown";
+    } catch (e) {
+      this.status = isDockerNotFound(e) ? "stopped" : "unknown";
     }
     return this.status;
   }
@@ -102,6 +135,12 @@ export class DockerRuntime implements Runtime {
 
   async start() {
     this.status = "starting";
+    await this.ensureContainer();
+    const info = (await this.container().inspect()) as DockerInspect;
+    if (info.State.Running && !info.State.Restarting) {
+      this.status = "running";
+      return;
+    }
     await this.container().start();
     this.startedAt = Date.now();
     this.status = "running";
@@ -110,19 +149,28 @@ export class DockerRuntime implements Runtime {
 
   async stop() {
     this.status = "stopping";
-    await this.container().stop({ t: 15 });
+    try {
+      await this.container().stop({ t: 15 });
+    } catch (e) {
+      if (!isDockerNotFound(e) && !isDockerNotModified(e)) throw e;
+    }
     this.status = "stopped";
     this.players.clear();
   }
 
   async restart() {
     this.status = "restarting";
+    await this.ensureContainer();
     await this.container().restart({ t: 15 });
     this.status = "running";
   }
 
   async kill() {
-    await this.container().kill();
+    try {
+      await this.container().kill();
+    } catch (e) {
+      if (!isDockerNotFound(e) && !isDockerNotModified(e)) throw e;
+    }
     this.status = "stopped";
   }
 
@@ -182,4 +230,141 @@ export class DockerRuntime implements Runtime {
   getPlayers() {
     return [...this.players.values()];
   }
+
+  private async ensureContainer() {
+    await ensureRunnableServerConfig(this.instance);
+    await ensureServerInstalled(this.instance, {
+      onLog: (message) => consoleBus.push(this.instance.id, message, "system"),
+    });
+    await this.ensureImage();
+
+    const info = await this.inspectContainer();
+    if (info && !info.State.Restarting && !this.needsRecreate(info)) return;
+
+    if (info) {
+      consoleBus.push(
+        this.instance.id,
+        info.State.Restarting
+          ? "Recreating container after Docker restart loop."
+          : "Recreating container to match the panel-managed instance config.",
+        "system",
+      );
+      await this.removeContainer();
+    }
+
+    await ensureInstanceDockerFiles(this.instance);
+    const port = String(this.instance.port);
+    const portBindings = {
+      [`${port}/tcp`]: [{ HostPort: port }],
+      [`${port}/udp`]: [{ HostPort: port }],
+    };
+    await docker().createContainer({
+      name: this.instance.docker.containerName,
+      Image: this.image(),
+      WorkingDir: "/server",
+      Cmd: dockerCommand(),
+      OpenStdin: true,
+      AttachStdin: true,
+      Tty: false,
+      ExposedPorts: {
+        [`${port}/tcp`]: {},
+        [`${port}/udp`]: {},
+      },
+      Env: [
+        `VINTAGE_STORY_SERVER_VERSION=${this.instance.version}`,
+        "VINTAGE_STORY_DATA_PATH=/data",
+      ],
+      Labels: {
+        "slutvival.panel.managed": "true",
+        "slutvival.panel.instance": this.instance.id,
+      },
+      HostConfig: {
+        Binds: dockerMounts(this.instance),
+        NetworkMode: this.instance.docker.network,
+        PortBindings: portBindings,
+        RestartPolicy: { Name: "unless-stopped" },
+        Memory: this.instance.resources.memoryLimitMB * 1024 * 1024,
+        NanoCpus:
+          this.instance.resources.cpuLimit > 0
+            ? Math.round(this.instance.resources.cpuLimit * 1_000_000_000)
+            : 0,
+      },
+    });
+  }
+
+  private async inspectContainer(): Promise<DockerInspect | null> {
+    try {
+      return (await this.container().inspect()) as DockerInspect;
+    } catch (e) {
+      if (isDockerNotFound(e)) return null;
+      throw e;
+    }
+  }
+
+  private needsRecreate(info: DockerInspect): boolean {
+    const mounts = dockerMounts(this.instance);
+    const binds = info.HostConfig.Binds ?? [];
+    const port = String(this.instance.port);
+    const ports = info.HostConfig.PortBindings ?? {};
+    const command = info.Config.Cmd ?? [];
+
+    return (
+      info.Config.Image !== this.image() ||
+      info.HostConfig.NetworkMode !== this.instance.docker.network ||
+      !mounts.every((mount) => binds.includes(mount)) ||
+      ports[`${port}/tcp`]?.[0]?.HostPort !== port ||
+      ports[`${port}/udp`]?.[0]?.HostPort !== port ||
+      command.join("\0") !== dockerCommand().join("\0")
+    );
+  }
+
+  private async removeContainer() {
+    try {
+      const info = await this.inspectContainer();
+      if (info?.State.Running) await this.container().stop({ t: 15 });
+      await this.container().remove({ force: true });
+    } catch (e) {
+      if (!isDockerNotFound(e)) throw e;
+    }
+  }
+
+  private async ensureImage() {
+    try {
+      await docker().getImage(this.image()).inspect();
+      return;
+    } catch (e) {
+      if (!isDockerNotFound(e)) throw e;
+    }
+
+    consoleBus.push(
+      this.instance.id,
+      `Pulling Docker image ${this.image()}...`,
+      "system",
+    );
+    const stream = await docker().pull(this.image());
+    await new Promise<void>((resolve, reject) => {
+      docker().modem.followProgress(stream, (err: Error | null) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+}
+
+function isDockerNotFound(error: unknown): error is { statusCode: 404 } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    error.statusCode === 404
+  );
+}
+
+function isDockerNotModified(error: unknown): error is { statusCode: 304 } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    error.statusCode === 304
+  );
 }

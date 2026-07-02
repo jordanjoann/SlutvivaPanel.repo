@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import type { Instance, Player, ServerStats, ServerStatus } from "@/lib/types";
-import { instanceDir, instanceDataPath } from "../config";
+import { instanceDir, instanceDataPath, instanceServerPath } from "../config";
 import { consoleBus } from "../console-bus";
 import type { Runtime } from "./types";
 
@@ -34,18 +34,26 @@ export class ProcessRuntime implements Runtime {
   static resolveLaunch(
     serverId: string,
   ): { cmd: string; args: string[]; cwd: string } | null {
-    const dir = instanceDir(serverId);
     const data = instanceDataPath(serverId);
+    const dirs = [instanceServerPath(serverId), instanceDir(serverId)];
     const binNames = process.platform === "win32"
       ? ["VintagestoryServer.exe"]
       : ["VintagestoryServer"];
-    for (const b of binNames) {
-      const p = path.join(dir, b);
-      if (fs.existsSync(p)) return { cmd: p, args: ["--dataPath", data], cwd: dir };
+    for (const dir of dirs) {
+      for (const b of binNames) {
+        const p = path.join(/* turbopackIgnore: true */ dir, b);
+        if (fs.existsSync(/* turbopackIgnore: true */ p)) {
+          return { cmd: p, args: ["--dataPath", data], cwd: dir };
+        }
+      }
+      const dll = path.join(
+        /* turbopackIgnore: true */ dir,
+        "VintagestoryServer.dll",
+      );
+      if (fs.existsSync(/* turbopackIgnore: true */ dll)) {
+        return { cmd: "dotnet", args: [dll, "--dataPath", data], cwd: dir };
+      }
     }
-    const dll = path.join(dir, "VintagestoryServer.dll");
-    if (fs.existsSync(dll))
-      return { cmd: "dotnet", args: [dll, "--dataPath", data], cwd: dir };
     return null;
   }
 

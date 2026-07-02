@@ -1,4 +1,5 @@
 import type {
+  Backup,
   Instance,
   InstanceRuntimeState,
   Player,
@@ -11,6 +12,7 @@ import { SimulatedRuntime } from "./runtimes/simulated";
 import { ProcessRuntime } from "./runtimes/process";
 import { DockerRuntime, dockerAvailable } from "./runtimes/docker";
 import { maybeCreateScheduledBackup } from "./backups";
+import { publishDiscordNotification } from "./discord";
 
 class Supervisor {
   private runtimes = new Map<string, Runtime>();
@@ -57,7 +59,9 @@ class Supervisor {
 
   async getState(inst: Instance): Promise<InstanceRuntimeState> {
     const rt = await this.ensureRuntime(inst);
-    void maybeCreateScheduledBackup(inst).catch(() => {});
+    void maybeCreateScheduledBackup(inst, (backup) =>
+      notifyScheduledBackup(inst, backup),
+    ).catch(() => {});
     if (rt instanceof DockerRuntime) {
       await rt.refresh();
       await rt.sample();
@@ -107,3 +111,16 @@ class Supervisor {
 }
 
 export const supervisor = singleton("supervisor", () => new Supervisor());
+
+async function notifyScheduledBackup(inst: Instance, backup: Backup) {
+  if (backup.kind === "restore-point") return;
+  try {
+    await publishDiscordNotification(
+      inst,
+      "admin",
+      `backup '${backup.name}' completed.`,
+    );
+  } catch (error) {
+    console.warn("Discord scheduled backup notification failed", error);
+  }
+}

@@ -13,8 +13,6 @@ import os from "node:os";
  *               ├── server.yml
  *               ├── docker-compose.yml
  *               ├── .env
- *               ├── README.md
- *               ├── notes/
  *               └── vintage/            (dataPath)
  *                   ├── Mods
  *                   ├── Managed-Mods
@@ -25,8 +23,8 @@ import os from "node:os";
  *                   └── BackupSaves
  *
  * On a Windows dev box there is no /opt, so we fall back to a local
- * `.slutvival-data` directory under the project so the panel runs and
- * seeds demo instances without touching the real infra.
+ * `.slutvival-data` directory under the project so the panel runs without
+ * touching the real infra.
  */
 
 function resolveRoot(): string {
@@ -51,7 +49,7 @@ export const config = {
       (process.platform === "win32"
         ? "//./pipe/docker_engine"
         : "/var/run/docker.sock"),
-    image: process.env.VINTAGE_STORY_IMAGE ?? "slutvival/vintage-story:latest",
+    image: process.env.VINTAGE_STORY_IMAGE ?? "mcr.microsoft.com/dotnet/runtime:10.0",
   },
 
   domains: {
@@ -61,9 +59,6 @@ export const config = {
     status: "status.slutvival.com",
     grafana: "grafana.slutvival.com",
   },
-
-  /** Seed demo instances on first run when the games dir is empty. */
-  demoSeed: process.env.PANEL_DEMO_SEED !== "false",
 
   /** Preferred runtime order. First that is usable wins per instance. */
   preferredRuntime: (process.env.PANEL_RUNTIME ?? "auto") as
@@ -84,6 +79,11 @@ export function instanceDir(serverId: string): string {
 /** The Vintage Story `--dataPath` for an instance. */
 export function instanceDataPath(serverId: string): string {
   return path.join(instanceDir(serverId), "vintage");
+}
+
+/** The install path for Vintage Story server binaries for an instance. */
+export function instanceServerPath(serverId: string): string {
+  return path.join(instanceDir(serverId), "server");
 }
 
 export function serverYmlPath(serverId: string): string {

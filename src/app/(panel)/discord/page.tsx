@@ -27,47 +27,30 @@ const routeSections: Array<{
   title: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
-  examples: string[];
 }> = [
   {
     kind: "chat",
     title: "Chat",
     description: "Global and server chat",
     icon: MessageCircleIcon,
-    examples: [
-      "[ServerName/Global][Role]Username: message text",
-      "[Discord]Username: message text",
-    ],
   },
   {
     kind: "notifications",
     title: "Notifications",
     description: "Players, deaths, storms",
     icon: BellIcon,
-    examples: [
-      "{Username} has joined the server! {playercount/maxplayers}",
-      "A temporal storm is imminent",
-    ],
   },
   {
     kind: "status",
     title: "Status",
     description: "Lifecycle output",
     icon: ActivityIcon,
-    examples: [
-      "{Game}: {ServerName} Restarting in 10 Minutes!",
-      "{Game}: {ServerName} has crashed",
-    ],
   },
   {
     kind: "admin",
     title: "Admin",
     description: "Private admin events",
     icon: ShieldAlertIcon,
-    examples: [
-      "Player and server admin notices",
-      "Ticket and moderation output",
-    ],
   },
 ];
 
@@ -171,34 +154,25 @@ export default function DiscordPage() {
               icon={Icon}
               bodyClassName="p-0"
             >
-              <div className="divide-y divide-border">
-                <div className="space-y-2 p-4">
-                  {routes.length > 0 ? (
-                    routes.map((route) => (
-                      <div
-                        key={route.id}
-                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-border bg-background px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{route.channelName}</p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {route.game} / {route.server}
-                          </p>
-                        </div>
-                        <RouteIcon className="size-4 text-muted-foreground" />
+              <div className="space-y-2 p-4">
+                {routes.length > 0 ? (
+                  routes.map((route) => (
+                    <div
+                      key={route.id}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-border bg-background px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{route.channelName}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {route.game} / {route.server}
+                        </p>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No route set.</p>
-                  )}
-                </div>
-                <div className="space-y-2 bg-muted/20 p-4">
-                  {section.examples.map((example) => (
-                    <p key={example} className="font-mono text-xs text-muted-foreground">
-                      {example}
-                    </p>
-                  ))}
-                </div>
+                      <RouteIcon className="size-4 text-muted-foreground" />
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No route set.</p>
+                )}
               </div>
             </SectionCard>
           );
