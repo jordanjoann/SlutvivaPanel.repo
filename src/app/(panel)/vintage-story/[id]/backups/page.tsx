@@ -110,7 +110,7 @@ export default function BackupsPage() {
             <EmptyState
               icon={ArchiveIcon}
               title="No backups yet"
-              description="Create a main backup or restore point to snapshot the current world state."
+              description="Create a main backup or restore point to upload the current world state to Backblaze."
               action={
                 <Button onClick={() => create("manual")} disabled={creating !== null}>
                   <PlusIcon /> Backup
@@ -121,7 +121,7 @@ export default function BackupsPage() {
             <>
               <BackupSection
                 title={`${mainBackups.length} main ${mainBackups.length === 1 ? "backup" : "backups"}`}
-                description="Manual and update backups stay until deleted. Daily backups rotate between 2 slots."
+                description="Manual and pre-update backups expire after 30 days. Daily backups keep the newest 2 archives in Backblaze."
                 backups={mainBackups}
                 onRestore={(b) =>
                   confirm({

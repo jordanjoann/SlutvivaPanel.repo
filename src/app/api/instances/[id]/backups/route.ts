@@ -1,6 +1,7 @@
 import * as backups from "@/lib/server/backups";
 import { json, ok, badRequest, notFound, serverError, loadInstance } from "@/lib/server/http";
 import { publishDiscordNotification } from "@/lib/server/discord";
+import { supervisor } from "@/lib/server/supervisor";
 import type { Backup, BackupKind, Instance } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +56,10 @@ export async function POST(req: Request, { params }: Ctx) {
       }
       case "restore": {
         if (!body.backupId) return badRequest("backupId required");
+        const state = await supervisor.getState(res.instance);
+        if (state.status === "running" || state.status === "starting" || state.status === "restarting") {
+          return badRequest("Stop the server before restoring a backup.");
+        }
         const done = await backups.restoreBackup(id, body.backupId);
         if (done) {
           await notifyDiscord(
