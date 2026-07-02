@@ -47,7 +47,7 @@ export function readBackupConfig(env: BackupEnv = process.env): BackupConfig {
     panelDbPath: env.SLUTVIVAL_PANEL_DB || DEFAULT_DB_PATH,
     gameStorage: readStorage(env, "GAME"),
     systemStorage: readStorage(env, "SYSTEM"),
-    systemAgeRecipient: env.SLUTVIVAL_SYSTEM_BACKUP_AGE_RECIPIENT,
+    systemAgeRecipient: optionalTrimmed(env.SLUTVIVAL_SYSTEM_BACKUP_AGE_RECIPIENT),
   };
 }
 
@@ -66,14 +66,17 @@ export function requireSystemStorageConfig(config = readBackupConfig()): BackupS
 }
 
 function readStorage(env: BackupEnv, scope: "GAME" | "SYSTEM"): BackupStorageConfig | undefined {
-  const bucket = env[`B2_${scope}_BACKUPS_BUCKET`];
-  const endpoint = env.B2_S3_ENDPOINT;
-  const region = env.B2_REGION;
-  const keyId = env[`B2_${scope}_BACKUPS_KEY_ID`];
-  const applicationKey = env[`B2_${scope}_BACKUPS_APPLICATION_KEY`];
-  const scopedValues = [bucket, keyId, applicationKey];
+  const rawBucket = env[`B2_${scope}_BACKUPS_BUCKET`];
+  const rawKeyId = env[`B2_${scope}_BACKUPS_KEY_ID`];
+  const rawApplicationKey = env[`B2_${scope}_BACKUPS_APPLICATION_KEY`];
+  const bucket = optionalTrimmed(rawBucket);
+  const endpoint = optionalTrimmed(env.B2_S3_ENDPOINT);
+  const region = optionalTrimmed(env.B2_REGION);
+  const keyId = optionalTrimmed(rawKeyId);
+  const applicationKey = optionalTrimmed(rawApplicationKey);
+  const scopedValues = [rawBucket, rawKeyId, rawApplicationKey];
   const values = [bucket, endpoint, region, keyId, applicationKey];
-  if (scopedValues.every((value) => !value)) return undefined;
+  if (scopedValues.every((value) => value === undefined || value === "")) return undefined;
   if (values.some((value) => !value)) {
     throw new Error(`B2 ${scope.toLowerCase()} backup configuration is incomplete.`);
   }
@@ -84,4 +87,9 @@ function readStorage(env: BackupEnv, scope: "GAME" | "SYSTEM"): BackupStorageCon
     keyId: keyId!,
     applicationKey: applicationKey!,
   };
+}
+
+function optionalTrimmed(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }

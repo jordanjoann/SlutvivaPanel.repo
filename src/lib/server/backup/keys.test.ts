@@ -19,4 +19,16 @@ describe("backup object keys", () => {
       "daily/2026-07-02/system-2026-07-02T20-00-00Z.tar.zst.age",
     );
   });
+
+  it("falls back for dot-only game backup path segments", () => {
+    expect(
+      gameBackupObjectKey({
+        game: "vintage-story",
+        instanceId: "..",
+        kind: "manual",
+        backupId: ".",
+        createdAt: Date.UTC(2026, 6, 2, 20, 0, 0),
+      }),
+    ).toBe("vintage-story/item/manual/2026-07-02T20-00-00Z-item.tar.zst");
+  });
 });

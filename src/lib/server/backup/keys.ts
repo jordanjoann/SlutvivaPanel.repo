@@ -35,11 +35,10 @@ function keyInstant(value: number): string {
 }
 
 function safeSegment(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9._-]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 80) || "item"
-  );
+  const segment = value
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return /[a-z0-9]/.test(segment) ? segment : "item";
 }
