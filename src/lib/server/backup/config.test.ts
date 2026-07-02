@@ -1,0 +1,31 @@
+import { describe, expect, it } from "vitest";
+import { readBackupConfig } from "./config";
+
+describe("readBackupConfig", () => {
+  it("uses safe defaults for local paths", () => {
+    const cfg = readBackupConfig({});
+    expect(cfg.stagingDir).toBe("/opt/slutvival/backups/staging");
+    expect(cfg.panelDbPath).toBe("/opt/slutvival/data/slutvival-panel.sqlite");
+  });
+
+  it("validates complete game storage credentials", () => {
+    const cfg = readBackupConfig({
+      B2_GAME_BACKUPS_BUCKET: "slutvival-game-backups",
+      B2_S3_ENDPOINT: "https://s3.us-west-004.backblazeb2.com",
+      B2_REGION: "us-west-004",
+      B2_GAME_BACKUPS_KEY_ID: "key-id",
+      B2_GAME_BACKUPS_APPLICATION_KEY: "app-key",
+    });
+    expect(cfg.gameStorage.bucket).toBe("slutvival-game-backups");
+    expect(cfg.gameStorage.endpoint).toBe("https://s3.us-west-004.backblazeb2.com");
+  });
+
+  it("throws a clear error when game storage is partially configured", () => {
+    expect(() =>
+      readBackupConfig({
+        B2_GAME_BACKUPS_BUCKET: "slutvival-game-backups",
+        B2_GAME_BACKUPS_KEY_ID: "key-id",
+      }),
+    ).toThrow(/B2 game backup configuration is incomplete/);
+  });
+});
