@@ -9,7 +9,7 @@ export const SYSTEM_DAILY_KEEP = 3;
 export function shouldCreateRestorePoint(backups: Backup[], now = Date.now()): boolean {
   const latest = backups
     .filter((backup) => backup.kind === "restore-point")
-    .sort((a, b) => b.createdAt - a.createdAt)[0];
+    .sort(compareBackupsByCreatedAtDescIdAsc)[0];
   return !latest || now - latest.createdAt >= ROLLING_INTERVAL_MS;
 }
 
@@ -21,22 +21,32 @@ export function shouldCreateDailyBackup(backups: Backup[], now = Date.now()): bo
 export function selectExpiredGameBackups(backups: Backup[], now = Date.now()): Backup[] {
   const expired = new Set<string>();
   for (const backup of backups) {
-    if (backup.kind === "restore-point" && now - backup.createdAt > ROLLING_TTL_MS) expired.add(backup.id);
-    if ((backup.kind === "manual" || backup.kind === "pre-update") && now - backup.createdAt > MANUAL_TTL_MS) {
-      expired.add(backup.id);
-    }
+    const expiresAt = expiresAtForKind(backup.kind, backup.createdAt);
+    if (expiresAt !== undefined && expiresAt <= now) expired.add(backup.id);
   }
 
-  const daily = backups
-    .filter((backup) => backup.kind === "auto")
-    .sort((a, b) => b.createdAt - a.createdAt);
-  for (const backup of daily.slice(DAILY_KEEP)) expired.add(backup.id);
+  const dailyByDay = new Map<string, Backup[]>();
+  for (const backup of backups) {
+    if (backup.kind !== "auto") continue;
+    const key = dayKey(backup.createdAt);
+    dailyByDay.set(key, [...(dailyByDay.get(key) ?? []), backup]);
+  }
+
+  const dailyRepresentatives: Backup[] = [];
+  for (const dailyBackups of dailyByDay.values()) {
+    const [representative, ...sameDayExtras] = [...dailyBackups].sort(compareBackupsByCreatedAtDescIdAsc);
+    if (representative) dailyRepresentatives.push(representative);
+    for (const backup of sameDayExtras) expired.add(backup.id);
+  }
+
+  dailyRepresentatives.sort(compareBackupsByCreatedAtDescIdAsc);
+  for (const backup of dailyRepresentatives.slice(DAILY_KEEP)) expired.add(backup.id);
 
   return backups.filter((backup) => expired.has(backup.id));
 }
 
 export function selectSystemObjectsToDelete<T extends { key: string; createdAt: number }>(objects: T[]): T[] {
-  return [...objects].sort((a, b) => b.createdAt - a.createdAt).slice(SYSTEM_DAILY_KEEP);
+  return [...objects].sort(compareObjectsByCreatedAtDescKeyAsc).slice(SYSTEM_DAILY_KEEP);
 }
 
 export function expiresAtForKind(kind: Backup["kind"], createdAt: number): number | undefined {
@@ -47,4 +57,22 @@ export function expiresAtForKind(kind: Backup["kind"], createdAt: number): numbe
 
 function dayKey(value: number): string {
   return new Date(value).toISOString().slice(0, 10);
+}
+
+function compareBackupsByCreatedAtDescIdAsc(a: Backup, b: Backup): number {
+  const byCreatedAt = b.createdAt - a.createdAt;
+  if (byCreatedAt !== 0) return byCreatedAt;
+  return compareStrings(a.id, b.id);
+}
+
+function compareObjectsByCreatedAtDescKeyAsc<T extends { key: string; createdAt: number }>(a: T, b: T): number {
+  const byCreatedAt = b.createdAt - a.createdAt;
+  if (byCreatedAt !== 0) return byCreatedAt;
+  return compareStrings(a.key, b.key);
+}
+
+function compareStrings(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
 }

@@ -52,6 +52,35 @@ describe("retention", () => {
     expect(SYSTEM_DAILY_KEEP).toBe(3);
   });
 
+  it("expires duplicate same-day daily backups without consuming all keep slots", () => {
+    const sameDayCreatedAt = now - 60_000;
+    const backups = [
+      backup("same-day-b", "auto", sameDayCreatedAt),
+      backup("same-day-a", "auto", sameDayCreatedAt),
+      backup("yesterday-new", "auto", now - 24 * 60 * 60_000),
+      backup("two-days-old", "auto", now - 2 * 24 * 60 * 60_000),
+    ];
+
+    expect(selectExpiredGameBackups(backups, now).map((b) => b.id).sort()).toEqual([
+      "same-day-b",
+      "two-days-old",
+    ]);
+  });
+
+  it("expires time-based backups at the exact TTL boundary", () => {
+    const backups = [
+      backup("rolling-boundary", "restore-point", now - ROLLING_TTL_MS),
+      backup("manual-boundary", "manual", now - MANUAL_TTL_MS),
+      backup("pre-update-boundary", "pre-update", now - MANUAL_TTL_MS),
+    ];
+
+    expect(selectExpiredGameBackups(backups, now).map((b) => b.id).sort()).toEqual([
+      "manual-boundary",
+      "pre-update-boundary",
+      "rolling-boundary",
+    ]);
+  });
+
   it("selects older system objects beyond the daily retention count", () => {
     const objects = [
       { key: "oldest", createdAt: now - 4 },
@@ -62,6 +91,17 @@ describe("retention", () => {
     ];
 
     expect(selectSystemObjectsToDelete(objects).map((object) => object.key)).toEqual(["fourth-newest", "oldest"]);
+  });
+
+  it("breaks system object timestamp ties by key", () => {
+    const objects = [
+      { key: "b-new", createdAt: now },
+      { key: "d-old-tie", createdAt: now - 1 },
+      { key: "c-old-tie", createdAt: now - 1 },
+      { key: "a-new", createdAt: now },
+    ];
+
+    expect(selectSystemObjectsToDelete(objects).map((object) => object.key)).toEqual(["d-old-tie"]);
   });
 
   it("returns expiration timestamps for backup kinds with time-based retention", () => {
