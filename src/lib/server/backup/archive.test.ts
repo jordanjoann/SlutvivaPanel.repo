@@ -25,8 +25,10 @@ describe("archive helpers", () => {
 
     const archive = path.join(dir, "out", "backup.tar.zst");
     const result = await createGameBackupArchive({ dataRoot: data, archivePath: archive });
+    const archiveStat = await fs.stat(archive);
     expect(result.fileCount).toBe(3);
     expect(result.sizeBytes).toBeGreaterThan(0);
+    expect(result.storedBytes).toBe(archiveStat.size);
     expect(result.checksumSha256).toMatch(/^[a-f0-9]{64}$/);
 
     const restore = path.join(dir, "restore");

@@ -18,9 +18,11 @@ afterEach(async () => {
 describe("BackupService", () => {
   it("creates a remote manual backup and removes local staging archive", async () => {
     const uploaded: string[] = [];
+    let uploadedBytes = 0;
     const storage = {
-      uploadFile: async (key: string) => {
+      uploadFile: async (key: string, file: string) => {
         uploaded.push(key);
+        uploadedBytes = (await fs.stat(file)).size;
       },
       deleteObject: async () => undefined,
       downloadFile: async () => undefined,
@@ -47,6 +49,7 @@ describe("BackupService", () => {
     });
 
     expect(backup.storage).toBe("backblaze");
+    expect(backup.storedBytes).toBe(uploadedBytes);
     expect(uploaded[0]).toMatch(/^vintage-story\/server-a\/manual\//);
     await expect(fs.readdir(path.join(dir, "staging"))).resolves.toEqual([]);
   });

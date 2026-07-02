@@ -8,6 +8,7 @@ const SNAPSHOT_ENTRIES = ["Saves", "ModConfig", "Mods", "Managed-Mods", "serverc
 
 export interface ArchiveResult {
   sizeBytes: number;
+  storedBytes: number;
   fileCount: number;
   checksumSha256: string;
 }
@@ -22,8 +23,9 @@ export async function createGameBackupArchive(input: {
   const fileCount = await countFiles(input.dataRoot, entries);
   const sizeBytes = await totalSize(input.dataRoot, entries);
   await run("tar", ["--zstd", "-cf", input.archivePath, "-C", input.dataRoot, ...entries]);
+  const storedBytes = (await fs.stat(input.archivePath)).size;
   const checksumSha256 = await sha256File(input.archivePath);
-  return { sizeBytes, fileCount, checksumSha256 };
+  return { sizeBytes, storedBytes, fileCount, checksumSha256 };
 }
 
 export async function extractGameBackupArchive(input: {
