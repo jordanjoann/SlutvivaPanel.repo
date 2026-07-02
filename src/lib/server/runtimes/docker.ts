@@ -107,6 +107,7 @@ export class DockerRuntime implements Runtime {
     } catch (e) {
       this.status = isDockerNotFound(e) ? "stopped" : "unknown";
     }
+    this.stats = normalizeDockerRuntimeStats(this.status, this.stats);
     return this.status;
   }
 
@@ -156,6 +157,7 @@ export class DockerRuntime implements Runtime {
     }
     this.status = "stopped";
     this.players.clear();
+    this.stats = normalizeDockerRuntimeStats(this.status, this.stats);
   }
 
   async restart() {
@@ -172,6 +174,7 @@ export class DockerRuntime implements Runtime {
       if (!isDockerNotFound(e) && !isDockerNotModified(e)) throw e;
     }
     this.status = "stopped";
+    this.stats = normalizeDockerRuntimeStats(this.status, this.stats);
   }
 
   async sendCommand(command: string) {
@@ -199,6 +202,10 @@ export class DockerRuntime implements Runtime {
   }
 
   async sample() {
+    if (this.status !== "running") {
+      this.stats = normalizeDockerRuntimeStats(this.status, this.stats);
+      return;
+    }
     try {
       const s = (await this.container().stats({ stream: false })) as unknown as {
         cpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number; online_cpus: number };
@@ -222,10 +229,11 @@ export class DockerRuntime implements Runtime {
     } catch {
       /* sampling best-effort */
     }
+    this.stats = normalizeDockerRuntimeStats(this.status, this.stats);
   }
 
   getStats() {
-    return { ...this.stats };
+    return normalizeDockerRuntimeStats(this.status, this.stats);
   }
   getPlayers() {
     return [...this.players.values()];
@@ -367,4 +375,44 @@ function isDockerNotModified(error: unknown): error is { statusCode: 304 } {
     "statusCode" in error &&
     error.statusCode === 304
   );
+}
+
+export function normalizeDockerRuntimeStats(
+  status: ServerStatus,
+  stats: ServerStats,
+): ServerStats {
+  const memoryLimitMB = finiteOrZero(stats.memoryLimitMB);
+  const diskUsedMB = finiteOrZero(stats.diskUsedMB);
+  const diskTotalMB = finiteOrZero(stats.diskTotalMB);
+
+  if (status !== "running") {
+    return {
+      ...stats,
+      cpuPercent: 0,
+      memoryUsedMB: 0,
+      memoryLimitMB,
+      memoryPercent: 0,
+      netRxKBs: 0,
+      netTxKBs: 0,
+      diskUsedMB,
+      diskTotalMB,
+      threads: 0,
+    };
+  }
+
+  return {
+    cpuPercent: finiteOrZero(stats.cpuPercent),
+    memoryUsedMB: finiteOrZero(stats.memoryUsedMB),
+    memoryLimitMB,
+    memoryPercent: finiteOrZero(stats.memoryPercent),
+    netRxKBs: finiteOrZero(stats.netRxKBs),
+    netTxKBs: finiteOrZero(stats.netTxKBs),
+    diskUsedMB,
+    diskTotalMB,
+    threads: finiteOrZero(stats.threads),
+  };
+}
+
+function finiteOrZero(value: number): number {
+  return Number.isFinite(value) ? value : 0;
 }
