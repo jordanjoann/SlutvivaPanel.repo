@@ -2,6 +2,8 @@ import Docker from "dockerode";
 import { config } from "@/lib/server/config";
 import { NIMBUS_PROXY_CONTAINER } from "./constants";
 
+const NIMBUS_PROXY_IMAGE = "mcr.microsoft.com/dotnet/aspnet:10.0";
+
 let dockerClient: Docker | null = null;
 function docker(): Docker {
   if (!dockerClient) dockerClient = new Docker({ socketPath: config.docker.socket });
@@ -12,7 +14,7 @@ export function nimbusProxyContainerSpec(runtimeDir: string): Docker.ContainerCr
   const publicPort = String(config.vintageNetwork.publicPort);
   return {
     name: NIMBUS_PROXY_CONTAINER,
-    Image: config.docker.image,
+    Image: NIMBUS_PROXY_IMAGE,
     WorkingDir: "/nimbus",
     Cmd: ["dotnet", "Nimbus.Proxy.dll"],
     ExposedPorts: {

@@ -14,6 +14,7 @@ describe("nimbusProxyContainerSpec", () => {
 
   it("runs Nimbus.Proxy.dll from the mounted runtime directory", () => {
     const spec = nimbusProxyContainerSpec("/opt/slutvival/tools/nimbus/runtime");
+    expect(spec.Image).toBe("mcr.microsoft.com/dotnet/aspnet:10.0");
     expect(spec.WorkingDir).toBe("/nimbus");
     expect(spec.Cmd).toEqual(["dotnet", "Nimbus.Proxy.dll"]);
   });
