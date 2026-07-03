@@ -45,6 +45,7 @@ export function creativeSuperflatHubWorld(): Partial<VintageStoryWorldGeneration
     worldType: "superflat",
     allowCreativeMode: true,
     creatureHostility: "off",
+    temporalStability: false,
     temporalStorms: "off",
     temporalRifts: "off",
     deathPunishment: "keep",

@@ -24,6 +24,9 @@ describe("vintage network constants", () => {
       gameMode: "creative",
       worldType: "superflat",
       allowCreativeMode: true,
+      temporalStability: false,
+      temporalStorms: "off",
+      temporalRifts: "off",
       whitelistMode: false,
     });
   });
