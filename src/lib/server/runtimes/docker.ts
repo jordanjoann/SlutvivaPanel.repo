@@ -3,6 +3,7 @@ import Docker from "dockerode";
 import type { Instance, Player, ServerStats, ServerStatus } from "@/lib/types";
 import { config } from "../config";
 import { consoleBus } from "../console-bus";
+import { normalizeConsoleCommand } from "../commands";
 import type { Runtime } from "./types";
 import {
   dockerCommand,
@@ -178,7 +179,9 @@ export class DockerRuntime implements Runtime {
   }
 
   async sendCommand(command: string) {
-    consoleBus.push(this.instance.id, command, "command");
+    const normalized = normalizeConsoleCommand(command);
+    if (!normalized) return;
+    consoleBus.push(this.instance.id, normalized, "command");
     try {
       if (!this.stdin) {
         const stream = (await this.container().attach({
@@ -190,7 +193,7 @@ export class DockerRuntime implements Runtime {
         })) as unknown as Duplex;
         this.stdin = stream;
       }
-      this.stdin.write(command.replace(/^\//, "") + "\n");
+      this.stdin.write(`${normalized}\n`);
     } catch {
       consoleBus.push(
         this.instance.id,

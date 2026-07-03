@@ -4,6 +4,7 @@ import type {
   ServerStats,
   ServerStatus,
 } from "@/lib/types";
+import { normalizeConsoleCommand } from "../commands";
 import { consoleBus } from "../console-bus";
 import type { Runtime } from "./types";
 
@@ -236,8 +237,10 @@ export class SimulatedRuntime implements Runtime {
 
   async sendCommand(command: string) {
     const id = this.instance.id;
-    consoleBus.push(id, command, "command");
-    const [cmd, ...args] = command.trim().replace(/^\//, "").split(/\s+/);
+    const normalized = normalizeConsoleCommand(command);
+    if (!normalized) return;
+    consoleBus.push(id, normalized, "command");
+    const [cmd, ...args] = normalized.split(/\s+/);
     const arg = args.join(" ");
 
     if (this.status !== "running" && cmd !== "start") {

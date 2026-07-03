@@ -9,6 +9,7 @@ import {
 import { fetcher } from "@/lib/api";
 import { PageHeader } from "@/components/panel/page-header";
 import { SectionCard } from "@/components/panel/section-card";
+import { VintageNetworkPanel } from "@/components/vintage-story/network-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -68,6 +69,7 @@ export default function SettingsPage() {
             />
           </div>
         </SectionCard>
+        <VintageNetworkPanel />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

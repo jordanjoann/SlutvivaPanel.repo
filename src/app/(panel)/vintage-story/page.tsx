@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/panel/page-header";
 import { EmptyState } from "@/components/panel/empty-state";
 import { InstanceCard } from "@/components/vintage-story/instance-card";
 import { CreateServerDialog } from "@/components/vintage-story/create-server-dialog";
-import { VintageNetworkPanel } from "@/components/vintage-story/network-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { InstanceWithState } from "@/lib/types";
 
@@ -23,8 +22,6 @@ export default function VintageStoryPage() {
         icon={MountainIcon}
         actions={<CreateServerDialog />}
       />
-
-      <VintageNetworkPanel />
 
       {isLoading && !instances ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">

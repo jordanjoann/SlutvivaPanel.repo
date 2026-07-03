@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Instance, Player, ServerStats, ServerStatus } from "@/lib/types";
 import { instanceDir, instanceDataPath, instanceServerPath } from "../config";
+import { normalizeConsoleCommand } from "../commands";
 import { consoleBus } from "../console-bus";
 import type { Runtime } from "./types";
 
@@ -139,12 +140,14 @@ export class ProcessRuntime implements Runtime {
   }
 
   async sendCommand(command: string) {
-    consoleBus.push(this.instance.id, command, "command");
+    const normalized = normalizeConsoleCommand(command);
+    if (!normalized) return;
+    consoleBus.push(this.instance.id, normalized, "command");
     if (!this.child) {
       consoleBus.push(this.instance.id, "Server is not running.", "system", "warning");
       return;
     }
-    this.child.stdin.write(command.replace(/^\//, "") + "\n");
+    this.child.stdin.write(`${normalized}\n`);
   }
 
   private ingest(chunk: string, stream: "stdout" | "stderr") {
