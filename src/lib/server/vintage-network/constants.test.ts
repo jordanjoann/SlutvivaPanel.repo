@@ -9,7 +9,7 @@ import {
 
 describe("vintage network constants", () => {
   it("pins the approved initial release tags", () => {
-    expect(STRATUM_RELEASE_TAG).toBe("v1.22.3-stratum.13");
+    expect(STRATUM_RELEASE_TAG).toBe("v1.22.3-stratum.12");
     expect(NIMBUS_RELEASE_TAG).toBe("0.1.0-dev");
   });
 
