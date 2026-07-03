@@ -73,8 +73,26 @@ export async function ensureNimbusProxy(runtimeDir: string): Promise<void> {
     if (!isDockerNotFound(error)) throw error;
   }
 
+  await ensureImage(NIMBUS_PROXY_IMAGE);
   await docker().createContainer(desired);
   await container.start();
+}
+
+async function ensureImage(image: string): Promise<void> {
+  try {
+    await docker().getImage(image).inspect();
+    return;
+  } catch (error) {
+    if (!isDockerNotFound(error)) throw error;
+  }
+
+  const stream = await docker().pull(image);
+  await new Promise<void>((resolve, reject) => {
+    docker().modem.followProgress(stream, (error: Error | null) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
 
 function isDockerNotFound(error: unknown): error is { statusCode: 404 } {
