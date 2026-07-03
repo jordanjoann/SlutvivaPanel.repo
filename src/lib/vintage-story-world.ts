@@ -3,6 +3,11 @@ export type SelectOption<T extends string = string> = {
   label: string;
 };
 
+export type NumberOption = {
+  value: number;
+  label: string;
+};
+
 export type VintageStoryPlayStyle =
   | "surviveandbuild"
   | "exploration"
@@ -189,6 +194,313 @@ export const BLOCK_GRAVITY_OPTIONS: Array<SelectOption<VintageStoryWorldGenerati
 export const CAVE_IN_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["caveIns"]>> = [
   { value: "off", label: "Off" },
   { value: "on", label: "On" },
+];
+
+export const WORLD_SIZE_OPTIONS: NumberOption[] = [
+  { value: 8192000, label: "8 million blocks" },
+  { value: 4096000, label: "4 million blocks" },
+  { value: 2048000, label: "2 million blocks" },
+  { value: 1024000, label: "1 million blocks" },
+  { value: 600000, label: "600k blocks" },
+  { value: 512000, label: "512k blocks" },
+  { value: 384000, label: "384k blocks" },
+  { value: 256000, label: "256k blocks" },
+  { value: 102400, label: "102k blocks" },
+  { value: 51200, label: "51k blocks" },
+  { value: 25600, label: "25k blocks" },
+  { value: 10240, label: "10k blocks" },
+  { value: 5120, label: "5,120 blocks" },
+  { value: 1024, label: "1,024 blocks" },
+  { value: 512, label: "512 blocks" },
+  { value: 384, label: "384 blocks" },
+  { value: 256, label: "256 blocks" },
+  { value: 128, label: "128 blocks" },
+  { value: 64, label: "64 blocks" },
+  { value: 32, label: "32 blocks" },
+];
+
+export const POLAR_EQUATOR_DISTANCE_OPTIONS: NumberOption[] = [
+  { value: 800000, label: "800k blocks" },
+  { value: 400000, label: "400k blocks" },
+  { value: 200000, label: "200k blocks" },
+  { value: 100000, label: "100k blocks" },
+  { value: 50000, label: "50k blocks" },
+  { value: 25000, label: "25k blocks" },
+  { value: 15000, label: "15k blocks" },
+  { value: 10000, label: "10k blocks" },
+  { value: 5000, label: "5,000 blocks" },
+];
+
+export const LANDCOVER_OPTIONS: NumberOption[] = [
+  { value: 0, label: "~0%" },
+  { value: 0.1, label: "10%" },
+  { value: 0.2, label: "20%" },
+  { value: 0.3, label: "30%" },
+  { value: 0.4, label: "40%" },
+  { value: 0.5, label: "50%" },
+  { value: 0.6, label: "60%" },
+  { value: 0.7, label: "70%" },
+  { value: 0.8, label: "80%" },
+  { value: 0.9, label: "90%" },
+  { value: 0.95, label: "95%" },
+  { value: 0.975, label: "97.5%" },
+  { value: 1, label: "100%" },
+];
+
+export const OCEAN_SCALE_OPTIONS: NumberOption[] = [
+  { value: 0.1, label: "10%" },
+  { value: 0.25, label: "25%" },
+  { value: 0.5, label: "50%" },
+  { value: 0.75, label: "75%" },
+  { value: 1, label: "100%" },
+  { value: 1.25, label: "125%" },
+  { value: 1.5, label: "150%" },
+  { value: 1.75, label: "175%" },
+  { value: 2, label: "200%" },
+  { value: 3, label: "300%" },
+  { value: 4, label: "400%" },
+  { value: 5, label: "500%" },
+];
+
+export const UPHEAVAL_COMMONNESS_OPTIONS: NumberOption[] = [
+  { value: 0, label: "0%" },
+  { value: 0.1, label: "10%" },
+  { value: 0.2, label: "20%" },
+  { value: 0.3, label: "30%" },
+  { value: 0.4, label: "40%" },
+  { value: 0.5, label: "50%" },
+  { value: 0.6, label: "60%" },
+  { value: 0.7, label: "70%" },
+  { value: 0.8, label: "80%" },
+  { value: 0.9, label: "90%" },
+  { value: 1, label: "100%" },
+];
+
+export const GEOLOGIC_ACTIVITY_OPTIONS: NumberOption[] = [
+  { value: 0, label: "None" },
+  { value: 0.05, label: "Rare" },
+  { value: 0.1, label: "Uncommon" },
+  { value: 0.2, label: "Common" },
+  { value: 0.4, label: "Very common" },
+];
+
+export const LANDFORM_SCALE_OPTIONS: NumberOption[] = [
+  { value: 0.2, label: "20%" },
+  { value: 0.4, label: "40%" },
+  { value: 0.6, label: "60%" },
+  { value: 0.8, label: "80%" },
+  { value: 1, label: "100%" },
+  { value: 1.2, label: "120%" },
+  { value: 1.4, label: "140%" },
+  { value: 1.6, label: "160%" },
+  { value: 1.8, label: "180%" },
+  { value: 2, label: "200%" },
+  { value: 3, label: "300%" },
+];
+
+export const GLOBAL_TEMPERATURE_OPTIONS: NumberOption[] = [
+  { value: 4, label: "Scorching hot" },
+  { value: 2, label: "Very hot" },
+  { value: 1.5, label: "Hot" },
+  { value: 1, label: "Normal" },
+  { value: 0.75, label: "Cold" },
+  { value: 0.5, label: "Very cold" },
+  { value: 0.25, label: "Snowball earth" },
+];
+
+export const GLOBAL_PRECIPITATION_OPTIONS: NumberOption[] = [
+  { value: 4, label: "Super humid" },
+  { value: 2, label: "Very humid" },
+  { value: 1.5, label: "Humid" },
+  { value: 1, label: "Normal" },
+  { value: 0.5, label: "Semi-arid" },
+  { value: 0.25, label: "Arid" },
+  { value: 0.1, label: "Hyperarid" },
+];
+
+export const GLOBAL_FORESTATION_OPTIONS: NumberOption[] = [
+  { value: 1, label: "Forest world (+100%)" },
+  { value: 0.9, label: "Extremely forested (+90%)" },
+  { value: 0.75, label: "Very highly forested (+75%)" },
+  { value: 0.5, label: "Highly forested (+50%)" },
+  { value: 0.25, label: "Somewhat more forest (+25%)" },
+  { value: 0, label: "Normal" },
+  { value: -0.25, label: "Somewhat less forest (-25%)" },
+  { value: -0.5, label: "Significantly less forested (-50%)" },
+  { value: -0.75, label: "Much less forested (-75%)" },
+  { value: -0.9, label: "Near tree-less (-90%)" },
+  { value: -1, label: "Tree-less world (-100%)" },
+];
+
+export const GLOBAL_DEPOSIT_SPAWN_RATE_OPTIONS: NumberOption[] = [
+  { value: 3, label: "Very common (300%)" },
+  { value: 2, label: "Common (200%)" },
+  { value: 1.8, label: "More common (180%)" },
+  { value: 1.6, label: "More common (160%)" },
+  { value: 1.4, label: "Slightly common (140%)" },
+  { value: 1.2, label: "Slightly common (120%)" },
+  { value: 1, label: "Normal (100%)" },
+  { value: 0.8, label: "Slightly rare (80%)" },
+  { value: 0.6, label: "Uncommon (60%)" },
+  { value: 0.4, label: "Rare (40%)" },
+  { value: 0.2, label: "Very rare (20%)" },
+];
+
+export const SURFACE_COPPER_DEPOSIT_OPTIONS: NumberOption[] = [
+  { value: 1, label: "Very common" },
+  { value: 0.5, label: "Common" },
+  { value: 0.2, label: "Uncommon" },
+  { value: 0.12, label: "Rare" },
+  { value: 0.05, label: "Very rare" },
+  { value: 0.015, label: "Extremely rare" },
+  { value: 0, label: "Never" },
+];
+
+export const SURFACE_TIN_DEPOSIT_OPTIONS: NumberOption[] = [
+  { value: 0.5, label: "Very common" },
+  { value: 0.25, label: "Common" },
+  { value: 0.12, label: "Uncommon" },
+  { value: 0.03, label: "Rare" },
+  { value: 0.014, label: "Very rare" },
+  { value: 0.007, label: "Extremely rare" },
+  { value: 0, label: "Never" },
+];
+
+export const DAYS_PER_MONTH_OPTIONS: NumberOption[] = [
+  { value: 30, label: "30 days (24 real life hours)" },
+  { value: 20, label: "20 days (16 real life hours)" },
+  { value: 12, label: "12 days (9.6 real life hours)" },
+  { value: 9, label: "9 days (7.2 real life hours)" },
+  { value: 6, label: "6 days (4.8 real life hours)" },
+  { value: 3, label: "3 days (2.4 real life hours)" },
+];
+
+export const GRACE_TIMER_OPTIONS: NumberOption[] = [
+  { value: 10, label: "10 days before monsters appear" },
+  { value: 5, label: "5 days before monsters appear" },
+  { value: 4, label: "4 days before monsters appear" },
+  { value: 3, label: "3 days before monsters appear" },
+  { value: 2, label: "2 days before monsters appear" },
+  { value: 1, label: "1 day before monsters appear" },
+  { value: 0, label: "No timer. Monsters spawn right away." },
+];
+
+export const CREATURE_STRENGTH_OPTIONS: NumberOption[] = [
+  { value: 4, label: "Deadly (400%)" },
+  { value: 2, label: "Very strong (200%)" },
+  { value: 1.5, label: "Strong (150%)" },
+  { value: 1, label: "Normal (100%)" },
+  { value: 0.5, label: "Weak (50%)" },
+  { value: 0.25, label: "Very weak (25%)" },
+];
+
+export const SPAWN_RADIUS_OPTIONS: NumberOption[] = [
+  { value: 10000, label: "10,000 blocks" },
+  { value: 5000, label: "5,000 blocks" },
+  { value: 2500, label: "2,500 blocks" },
+  { value: 1000, label: "1,000 blocks" },
+  { value: 500, label: "500 blocks" },
+  { value: 250, label: "250 blocks" },
+  { value: 100, label: "100 blocks" },
+  { value: 50, label: "50 blocks" },
+  { value: 25, label: "25 blocks" },
+  { value: 0, label: "0 blocks" },
+];
+
+export const PLAYER_LIVES_OPTIONS: NumberOption[] = [
+  { value: 1, label: "1" },
+  { value: 2, label: "2" },
+  { value: 3, label: "3" },
+  { value: 4, label: "4" },
+  { value: 5, label: "5" },
+  { value: 10, label: "10" },
+  { value: 20, label: "20" },
+  { value: -1, label: "Infinite" },
+];
+
+export const PLAYER_HEALTH_POINTS_OPTIONS: NumberOption[] = [
+  { value: 5, label: "5 hp" },
+  { value: 10, label: "10 hp" },
+  { value: 15, label: "15 hp" },
+  { value: 20, label: "20 hp" },
+  { value: 25, label: "25 hp" },
+  { value: 30, label: "30 hp" },
+  { value: 35, label: "35 hp" },
+];
+
+export const PLAYER_HUNGER_SPEED_OPTIONS: NumberOption[] = [
+  { value: 2, label: "Very fast (200%)" },
+  { value: 1.5, label: "Fast (150%)" },
+  { value: 1.25, label: "Slightly faster (125%)" },
+  { value: 1, label: "Normal (100%)" },
+  { value: 0.75, label: "Slightly slower (75%)" },
+  { value: 0.5, label: "Slower (50%)" },
+  { value: 0.25, label: "Much slower (25%)" },
+];
+
+export const PLAYER_HEALTH_REGEN_SPEED_OPTIONS: NumberOption[] = [
+  { value: 2, label: "Very fast (200%)" },
+  { value: 1.5, label: "Fast (150%)" },
+  { value: 1.25, label: "Slightly faster (125%)" },
+  { value: 1, label: "Normal (100%)" },
+  { value: 0.75, label: "Slightly slower (75%)" },
+  { value: 0.5, label: "Slower (50%)" },
+  { value: 0.25, label: "Much slower (25%)" },
+];
+
+export const PLAYER_MOVE_SPEED_OPTIONS: NumberOption[] = [
+  { value: 2, label: "Fast" },
+  { value: 1.75, label: "Slightly faster" },
+  { value: 1.5, label: "Normal" },
+  { value: 1.25, label: "Slightly slower" },
+  { value: 1, label: "Slower" },
+  { value: 0.75, label: "Much slower" },
+];
+
+export const FOOD_SPOIL_SPEED_OPTIONS: NumberOption[] = [
+  { value: 4, label: "400%" },
+  { value: 3, label: "300%" },
+  { value: 2, label: "200%" },
+  { value: 1.5, label: "150%" },
+  { value: 1.25, label: "125%" },
+  { value: 1, label: "100%" },
+  { value: 0.75, label: "75%" },
+  { value: 0.5, label: "50%" },
+  { value: 0.25, label: "25%" },
+];
+
+export const SAPLING_GROWTH_RATE_OPTIONS: NumberOption[] = [
+  { value: 16, label: "Extremely slow (16x)" },
+  { value: 8, label: "Much slower (8x)" },
+  { value: 4, label: "Slower (4x)" },
+  { value: 2, label: "Somewhat slower (2x)" },
+  { value: 1.5, label: "Slightly slower (1.5x)" },
+  { value: 1, label: "Normal (1x)" },
+  { value: 0.75, label: "Slightly faster (0.75x)" },
+  { value: 0.5, label: "Faster (0.5x)" },
+  { value: 0.25, label: "Much faster (0.25x)" },
+];
+
+export const TOOL_DURABILITY_OPTIONS: NumberOption[] = [
+  { value: 4, label: "400%" },
+  { value: 3, label: "300%" },
+  { value: 2, label: "200%" },
+  { value: 1.5, label: "150%" },
+  { value: 1.25, label: "125%" },
+  { value: 1, label: "100%" },
+  { value: 0.75, label: "75%" },
+  { value: 0.5, label: "50%" },
+];
+
+export const TOOL_MINING_SPEED_OPTIONS: NumberOption[] = [
+  { value: 3, label: "300%" },
+  { value: 2, label: "200%" },
+  { value: 1.5, label: "150%" },
+  { value: 1.25, label: "125%" },
+  { value: 1, label: "100%" },
+  { value: 0.75, label: "75%" },
+  { value: 0.5, label: "50%" },
+  { value: 0.25, label: "25%" },
 ];
 
 export const DEFAULT_WORLD_GENERATION_CONFIG: VintageStoryWorldGenerationConfig = {

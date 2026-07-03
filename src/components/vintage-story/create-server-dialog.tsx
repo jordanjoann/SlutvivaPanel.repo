@@ -31,17 +31,44 @@ import {
   BLOCK_GRAVITY_OPTIONS,
   CAVE_IN_OPTIONS,
   CREATURE_HOSTILITY_OPTIONS,
+  CREATURE_STRENGTH_OPTIONS,
+  DAYS_PER_MONTH_OPTIONS,
   DEATH_PUNISHMENT_OPTIONS,
   DEFAULT_WORLD_GENERATION_CONFIG,
+  FOOD_SPOIL_SPEED_OPTIONS,
   GAME_MODE_OPTIONS,
+  GEOLOGIC_ACTIVITY_OPTIONS,
+  GLOBAL_DEPOSIT_SPAWN_RATE_OPTIONS,
+  GLOBAL_FORESTATION_OPTIONS,
+  GLOBAL_PRECIPITATION_OPTIONS,
+  GLOBAL_TEMPERATURE_OPTIONS,
+  GRACE_TIMER_OPTIONS,
+  LANDCOVER_OPTIONS,
+  LANDFORM_SCALE_OPTIONS,
+  OCEAN_SCALE_OPTIONS,
+  PLAYER_HEALTH_POINTS_OPTIONS,
+  PLAYER_HEALTH_REGEN_SPEED_OPTIONS,
+  PLAYER_HUNGER_SPEED_OPTIONS,
+  PLAYER_LIVES_OPTIONS,
+  PLAYER_MOVE_SPEED_OPTIONS,
+  POLAR_EQUATOR_DISTANCE_OPTIONS,
+  SAPLING_GROWTH_RATE_OPTIONS,
   SEASON_OPTIONS,
+  SPAWN_RADIUS_OPTIONS,
   STARTING_CLIMATE_OPTIONS,
+  SURFACE_COPPER_DEPOSIT_OPTIONS,
+  SURFACE_TIN_DEPOSIT_OPTIONS,
   TEMPORAL_RIFT_OPTIONS,
   TEMPORAL_STORM_OPTIONS,
+  TOOL_DURABILITY_OPTIONS,
+  TOOL_MINING_SPEED_OPTIONS,
+  UPHEAVAL_COMMONNESS_OPTIONS,
   VINTAGE_STORY_PLAY_STYLES,
   WORLD_CLIMATE_OPTIONS,
   WORLD_EDGE_OPTIONS,
+  WORLD_SIZE_OPTIONS,
   WORLD_TYPE_OPTIONS,
+  type NumberOption,
   playStyleMeta,
   type SelectOption,
   type VintageStoryPlayStyle,
@@ -300,16 +327,16 @@ export function CreateServerDialog() {
 
             <CreateSection title="World Generation">
               <div className="grid gap-4 lg:grid-cols-4">
-                <NumberField
+                <NumberSelectField
                   label="World width"
                   value={worldConfig.worldWidth}
-                  min={32}
+                  options={WORLD_SIZE_OPTIONS}
                   onChange={(worldWidth) => updateConfig({ worldWidth })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="World length"
                   value={worldConfig.worldLength}
-                  min={32}
+                  options={WORLD_SIZE_OPTIONS}
                   onChange={(worldLength) => updateConfig({ worldLength })}
                 />
                 <NumberField
@@ -336,10 +363,10 @@ export function CreateServerDialog() {
                   options={STARTING_CLIMATE_OPTIONS}
                   onChange={(startingClimate) => updateConfig({ startingClimate })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Pole-equator distance"
                   value={worldConfig.polarEquatorDistance}
-                  min={1000}
+                  options={POLAR_EQUATOR_DISTANCE_OPTIONS}
                   onChange={(polarEquatorDistance) => updateConfig({ polarEquatorDistance })}
                 />
                 <SelectField
@@ -348,91 +375,70 @@ export function CreateServerDialog() {
                   options={WORLD_EDGE_OPTIONS}
                   onChange={(worldEdge) => updateConfig({ worldEdge })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Landcover"
                   value={worldConfig.landcover}
-                  min={0}
-                  max={1}
-                  step={0.025}
+                  options={LANDCOVER_OPTIONS}
                   onChange={(landcover) => updateConfig({ landcover })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Landcover scale"
                   value={worldConfig.oceanscale}
-                  min={0.1}
-                  max={5}
-                  step={0.1}
+                  options={OCEAN_SCALE_OPTIONS}
                   onChange={(oceanscale) => updateConfig({ oceanscale })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Upheaval"
                   value={worldConfig.upheavelCommonness}
-                  min={0}
-                  max={1}
-                  step={0.05}
+                  options={UPHEAVAL_COMMONNESS_OPTIONS}
                   onChange={(upheavelCommonness) => updateConfig({ upheavelCommonness })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Geologic activity"
                   value={worldConfig.geologicActivity}
-                  min={0}
-                  max={0.4}
-                  step={0.01}
+                  options={GEOLOGIC_ACTIVITY_OPTIONS}
                   onChange={(geologicActivity) => updateConfig({ geologicActivity })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Landform scale"
                   value={worldConfig.landformScale}
-                  min={0.2}
-                  max={3}
-                  step={0.1}
+                  options={LANDFORM_SCALE_OPTIONS}
                   onChange={(landformScale) => updateConfig({ landformScale })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Temperature"
                   value={worldConfig.globalTemperature}
-                  min={0}
-                  max={5}
-                  step={0.1}
+                  options={GLOBAL_TEMPERATURE_OPTIONS}
                   onChange={(globalTemperature) => updateConfig({ globalTemperature })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Precipitation"
                   value={worldConfig.globalPrecipitation}
-                  min={0}
-                  max={5}
-                  step={0.1}
+                  options={GLOBAL_PRECIPITATION_OPTIONS}
                   onChange={(globalPrecipitation) => updateConfig({ globalPrecipitation })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Forestation"
                   value={worldConfig.globalForestation}
-                  min={-1}
-                  max={1}
-                  step={0.1}
+                  options={GLOBAL_FORESTATION_OPTIONS}
                   onChange={(globalForestation) => updateConfig({ globalForestation })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Ore deposit rate"
                   value={worldConfig.globalDepositSpawnRate}
-                  min={0}
-                  step={0.1}
+                  options={GLOBAL_DEPOSIT_SPAWN_RATE_OPTIONS}
                   onChange={(globalDepositSpawnRate) => updateConfig({ globalDepositSpawnRate })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Surface copper"
                   value={worldConfig.surfaceCopperDeposits}
-                  min={0}
-                  max={5}
-                  step={0.01}
+                  options={SURFACE_COPPER_DEPOSIT_OPTIONS}
                   onChange={(surfaceCopperDeposits) => updateConfig({ surfaceCopperDeposits })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Surface tin"
                   value={worldConfig.surfaceTinDeposits}
-                  min={0}
-                  max={5}
-                  step={0.001}
+                  options={SURFACE_TIN_DEPOSIT_OPTIONS}
                   onChange={(surfaceTinDeposits) => updateConfig({ surfaceTinDeposits })}
                 />
               </div>
@@ -440,16 +446,16 @@ export function CreateServerDialog() {
 
             <CreateSection title="Survival">
               <div className="grid gap-4 lg:grid-cols-4">
-                <NumberField
+                <NumberSelectField
                   label="Days per month"
                   value={worldConfig.daysPerMonth}
-                  min={1}
+                  options={DAYS_PER_MONTH_OPTIONS}
                   onChange={(daysPerMonth) => updateConfig({ daysPerMonth })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Enemy grace days"
                   value={worldConfig.graceTimer}
-                  min={0}
+                  options={GRACE_TIMER_OPTIONS}
                   onChange={(graceTimer) => updateConfig({ graceTimer })}
                 />
                 <SelectField
@@ -458,12 +464,10 @@ export function CreateServerDialog() {
                   options={CREATURE_HOSTILITY_OPTIONS}
                   onChange={(creatureHostility) => updateConfig({ creatureHostility })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Creature strength"
                   value={worldConfig.creatureStrength}
-                  min={0}
-                  max={99}
-                  step={0.1}
+                  options={CREATURE_STRENGTH_OPTIONS}
                   onChange={(creatureStrength) => updateConfig({ creatureStrength })}
                 />
                 <SelectField
@@ -478,77 +482,64 @@ export function CreateServerDialog() {
                   options={DEATH_PUNISHMENT_OPTIONS}
                   onChange={(deathPunishment) => updateConfig({ deathPunishment })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Spawn radius"
                   value={worldConfig.spawnRadius}
-                  min={0}
+                  options={SPAWN_RADIUS_OPTIONS}
                   onChange={(spawnRadius) => updateConfig({ spawnRadius })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Player lives"
                   value={worldConfig.playerLives}
-                  min={-1}
+                  options={PLAYER_LIVES_OPTIONS}
                   onChange={(playerLives) => updateConfig({ playerLives })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Health points"
                   value={worldConfig.playerHealthPoints}
-                  min={1}
+                  options={PLAYER_HEALTH_POINTS_OPTIONS}
                   onChange={(playerHealthPoints) => updateConfig({ playerHealthPoints })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Hunger speed"
                   value={worldConfig.playerHungerSpeed}
-                  min={0}
-                  max={10}
-                  step={0.1}
+                  options={PLAYER_HUNGER_SPEED_OPTIONS}
                   onChange={(playerHungerSpeed) => updateConfig({ playerHungerSpeed })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Move speed"
                   value={worldConfig.playerMoveSpeed}
-                  min={0}
-                  max={10}
-                  step={0.1}
+                  options={PLAYER_MOVE_SPEED_OPTIONS}
                   onChange={(playerMoveSpeed) => updateConfig({ playerMoveSpeed })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Health regen"
                   value={worldConfig.playerHealthRegenSpeed}
-                  min={0.25}
-                  max={2}
-                  step={0.05}
+                  options={PLAYER_HEALTH_REGEN_SPEED_OPTIONS}
                   onChange={(playerHealthRegenSpeed) => updateConfig({ playerHealthRegenSpeed })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Food spoil speed"
                   value={worldConfig.foodSpoilSpeed}
-                  min={0}
-                  max={10}
-                  step={0.1}
+                  options={FOOD_SPOIL_SPEED_OPTIONS}
                   onChange={(foodSpoilSpeed) => updateConfig({ foodSpoilSpeed })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Sapling growth"
                   value={worldConfig.saplingGrowthRate}
-                  min={0}
-                  step={0.1}
+                  options={SAPLING_GROWTH_RATE_OPTIONS}
                   onChange={(saplingGrowthRate) => updateConfig({ saplingGrowthRate })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Tool durability"
                   value={worldConfig.toolDurability}
-                  min={0}
-                  max={99}
-                  step={0.1}
+                  options={TOOL_DURABILITY_OPTIONS}
                   onChange={(toolDurability) => updateConfig({ toolDurability })}
                 />
-                <NumberField
+                <NumberSelectField
                   label="Tool mining speed"
                   value={worldConfig.toolMiningSpeed}
-                  min={0}
-                  max={99}
-                  step={0.1}
+                  options={TOOL_MINING_SPEED_OPTIONS}
                   onChange={(toolMiningSpeed) => updateConfig({ toolMiningSpeed })}
                 />
                 <SelectField
@@ -771,6 +762,40 @@ function NumberField({
         value={value}
         onChange={(e) => onChange(numberInput(e.target.value, value))}
       />
+    </Field>
+  );
+}
+
+function NumberSelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  options: NumberOption[];
+  onChange: (value: number) => void;
+}) {
+  return (
+    <Field label={label}>
+      <Select
+        value={String(value)}
+        onValueChange={(next) => {
+          if (next !== null) onChange(numberInput(next, value));
+        }}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={String(option.value)}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </Field>
   );
 }
