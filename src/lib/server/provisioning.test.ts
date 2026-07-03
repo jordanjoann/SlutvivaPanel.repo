@@ -2,6 +2,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Instance } from "@/lib/types";
 import {
+  dockerCompose,
   dockerCommand,
   dockerMounts,
   serverInstallMarkerValue,
@@ -47,5 +48,20 @@ describe("provisioning engine support", () => {
 
   it("includes engine and version in install markers", () => {
     expect(serverInstallMarkerValue(instance("stratum"))).toBe("stratum:1.22.3");
+  });
+
+  it("does not publish Stratum backend ports in generated compose files", () => {
+    expect(dockerCompose(instance("stratum"))).not.toContain("    ports:");
+    expect(dockerCompose(instance("stratum"))).not.toContain("42420:42420");
+  });
+
+  it("keeps vanilla backend ports in generated compose files", () => {
+    expect(dockerCompose(instance("vanilla"))).toContain("    ports:");
+    expect(dockerCompose(instance("vanilla"))).toContain('"42420:42420/tcp"');
+    expect(dockerCompose(instance("vanilla"))).toContain('"42420:42420/udp"');
+  });
+
+  it("uses a read-write server volume for Stratum compose files", () => {
+    expect(dockerCompose(instance("stratum"))).toContain("      - ./server:/server:rw");
   });
 });

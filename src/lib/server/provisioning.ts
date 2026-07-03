@@ -177,11 +177,19 @@ async function validateServerInstall(dir: string): Promise<void> {
   }
 }
 
-function dockerCompose(inst: Instance): string {
+export function dockerCompose(inst: Instance): string {
   const service = dockerServiceName(inst);
   const image = normalizeDockerImage(inst.docker.image);
   const cpuLimit = inst.resources.cpuLimit > 0 ? inst.resources.cpuLimit : undefined;
   const cpus = cpuLimit ? `    cpus: "${cpuLimit}"\n` : "";
+  const portLines = inst.serverEngine === "stratum"
+    ? []
+    : [
+        "    ports:",
+        `      - "${inst.port}:${inst.port}/tcp"`,
+        `      - "${inst.port}:${inst.port}/udp"`,
+      ];
+  const serverVolumeMode = inst.serverEngine === "stratum" ? "rw" : "ro";
 
   return [
     "services:",
@@ -197,11 +205,9 @@ function dockerCompose(inst: Instance): string {
     `    mem_limit: ${inst.resources.memoryLimitMB}m`,
     "    networks:",
     `      - ${inst.docker.network}`,
-    "    ports:",
-    `      - "${inst.port}:${inst.port}/tcp"`,
-    `      - "${inst.port}:${inst.port}/udp"`,
+    ...portLines,
     "    volumes:",
-    "      - ./server:/server:ro",
+    `      - ./server:/server:${serverVolumeMode}`,
     "      - ./vintage:/data",
     "    environment:",
     `      VINTAGE_STORY_SERVER_VERSION: "${inst.version}"`,
