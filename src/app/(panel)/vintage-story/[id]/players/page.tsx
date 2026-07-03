@@ -71,8 +71,8 @@ export default function PlayersPage() {
   const assignedRoles = data?.assignedRoles ?? [];
   const roles = data?.roles ?? [];
   const defaultRole = data?.defaultRole ?? roles[0] ?? "member";
-  const assignableRoles = roles.filter((role) => role !== defaultRole);
-  const roleTarget = selectedRole || assignableRoles[0] || roles[0] || "";
+  const roleOptions = roles;
+  const roleTarget = selectedRole && roleOptions.includes(selectedRole) ? selectedRole : roleOptions[0] || "";
   const query = search.trim().toLowerCase();
   const filteredOnline = players.filter((p) => matchesPlayer(p, query));
   const filteredOffline = offlinePlayers.filter((p) => matchesPlayer(p, query));
@@ -94,8 +94,8 @@ export default function PlayersPage() {
       toast.error("Enter a username");
       return;
     }
-    if (!roleTarget || roleTarget === defaultRole) {
-      toast.error("Choose a non-default role");
+    if (!roleTarget) {
+      toast.error("Choose a role");
       return;
     }
     if (await act("role", target, "Updated role for", { role: roleTarget })) {
@@ -246,7 +246,7 @@ export default function PlayersPage() {
               <RoleAssignmentForm
                 name={roleInput}
                 role={roleTarget}
-                roles={assignableRoles}
+                roles={roleOptions}
                 onNameChange={setRoleInput}
                 onRoleChange={setSelectedRole}
                 onSubmit={assignRole}
@@ -254,12 +254,12 @@ export default function PlayersPage() {
               <ManagedPlayerList
                 empty="No non-default role assignments yet."
                 players={assignedRoles}
-                roleOptions={assignableRoles}
+                roleOptions={roleOptions}
                 action={(player) => (
                   <div className="flex flex-wrap items-center gap-1.5">
                     <RoleSelect
                       value={player.role ?? defaultRole}
-                      roles={assignableRoles}
+                      roles={roleOptions}
                       playerName={player.name}
                       onChange={(nextRole) =>
                         act("role", player.name, "Updated role for", { role: nextRole })

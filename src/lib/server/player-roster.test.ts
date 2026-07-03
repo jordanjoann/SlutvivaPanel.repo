@@ -103,6 +103,32 @@ describe("player roster", () => {
     expect(roster.defaultRole).toBe("suplayer");
   });
 
+  it("reads role options from serverconfig.json even when serverroles.json exists", async () => {
+    const { getPlayerRoster } = await setupRoster({
+      playerdata: [],
+      panelPlayers: [],
+      serverConfig: {
+        DefaultRoleCode: "suplayer",
+        Roles: [
+          { Code: "guest" },
+          { Code: "spectator" },
+          { Code: "suplayer" },
+          { Code: "sumod" },
+          { Code: "admin" },
+        ],
+      },
+      serverRoles: {
+        DefaultRoleCode: "admin",
+        Roles: [{ Code: "admin" }],
+      },
+    });
+
+    const roster = await getPlayerRoster(instance(), []);
+
+    expect(roster.roles).toEqual(["guest", "spectator", "suplayer", "sumod", "admin"]);
+    expect(roster.defaultRole).toBe("suplayer");
+  });
+
   it("resolves managed player names through Vintage Story auth before caching", async () => {
     const { getPlayerRoster, updateKnownPlayer } = await setupRoster({
       playerdata: [],
@@ -178,10 +204,12 @@ async function setupRoster({
     DefaultRoleCode: "suplayer",
     Roles: [{ Code: "suplayer" }, { Code: "admin" }],
   },
+  serverRoles,
 }: {
   playerdata: unknown[];
   panelPlayers: unknown[];
   serverConfig?: unknown;
+  serverRoles?: unknown;
 }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "slutvival-roster-"));
   vi.resetModules();
@@ -195,6 +223,13 @@ async function setupRoster({
     JSON.stringify(serverConfig, null, 2),
     "utf8",
   );
+  if (serverRoles) {
+    await fs.writeFile(
+      path.join(data, "serverroles.json"),
+      JSON.stringify(serverRoles, null, 2),
+      "utf8",
+    );
+  }
   await fs.writeFile(
     path.join(data, "ModConfig", "panel-players.json"),
     JSON.stringify(panelPlayers, null, 2),

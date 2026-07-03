@@ -147,11 +147,7 @@ async function readRoleConfig(serverId: string): Promise<RoleConfig> {
   try {
     const raw = await fs.readFile(vsPaths(serverId).serverConfig, "utf8");
     const parsed = JSON.parse(raw) as ServerConfig;
-    const roleByCode = Object.keys(parsed.RoleByCode ?? {}).filter(Boolean);
-    const roleArray = Array.isArray(parsed.Roles)
-      ? parsed.Roles.map((role) => role.Code).filter(isNonEmptyString)
-      : [];
-    const roles = roleByCode.length > 0 ? roleByCode : roleArray;
+    const roles = roleCodesFromConfig(parsed);
     if (roles.length > 0) {
       const defaultRole = isNonEmptyString(parsed.DefaultRoleCode) &&
         roles.includes(parsed.DefaultRoleCode)
@@ -164,6 +160,18 @@ async function readRoleConfig(serverId: string): Promise<RoleConfig> {
   }
   const roles = ["admin", "member"];
   return { roles, defaultRole: preferredDefaultRole(roles) };
+}
+
+function roleCodesFromConfig(config: ServerConfig): string[] {
+  const roleByCode = Object.keys(config.RoleByCode ?? {}).filter(isNonEmptyString);
+  const roleArray = Array.isArray(config.Roles)
+    ? config.Roles.map((role) => role.Code).filter(isNonEmptyString)
+    : [];
+  return uniqueStrings(roleByCode.length > 0 ? roleByCode : roleArray);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 async function readRosterRecords(serverId: string): Promise<PlayerRecord[]> {
@@ -298,7 +306,9 @@ function fallbackOfflineRecords(defaultRole: string, roles: string[]): PlayerRec
 }
 
 function preferredDefaultRole(roles: string[]): string {
-  return roles.includes("member") ? "member" : roles[0] ?? "member";
+  if (roles.includes("member")) return "member";
+  if (roles.includes("suplayer")) return "suplayer";
+  return roles[0] ?? "member";
 }
 
 function slugName(name: string): string {
