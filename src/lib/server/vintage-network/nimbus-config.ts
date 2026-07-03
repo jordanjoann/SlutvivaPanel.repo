@@ -27,12 +27,14 @@ export function backendAddress(inst: Instance): string {
 
 export function nimbusProxyToml(instances: Instance[], secret: string): string {
   const active = instances.filter((inst) => inst.game === "vintage-story");
+  const tryInstance = active.find((inst) => inst.id === HUB_INSTANCE_ID) ?? active[0];
+  const tryRoute = tryInstance?.id ?? HUB_INSTANCE_ID;
   const serverLines = active
     .map((inst) => `${inst.id} = "${backendAddress(inst)}"`)
     .sort();
-  const tryRoute = active.some((inst) => inst.id === HUB_INSTANCE_ID)
-    ? HUB_INSTANCE_ID
-    : active[0]?.id ?? HUB_INSTANCE_ID;
+  if (tryInstance && !active.some((inst) => inst.id === "default")) {
+    serverLines.unshift(`default = "${backendAddress(tryInstance)}"`);
+  }
 
   return [
     `bind = "0.0.0.0:${config.vintageNetwork.publicPort}"`,

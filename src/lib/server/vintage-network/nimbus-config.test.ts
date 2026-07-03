@@ -63,6 +63,7 @@ describe("nimbus config", () => {
     expect(toml).toContain('bind = "0.0.0.0:42420"');
     expect(toml).toContain('embedded_bind = "http://0.0.0.0:8765"');
     expect(toml).toContain('hub = "vs-hub:42420"');
+    expect(toml).toContain('default = "vs-hub:42420"');
     expect(toml).toContain('try = ["hub"]');
     expect(toml.indexOf('try = ["hub"]')).toBeLessThan(toml.indexOf("[servers]"));
   });
