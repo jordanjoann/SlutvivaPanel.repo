@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ServerStats } from "@/lib/types";
-import { normalizeDockerRuntimeStats } from "./docker";
+import type { Instance, ServerStats } from "@/lib/types";
+import {
+  backendPortBindings,
+  normalizeDockerRuntimeStats,
+} from "./docker";
 
 function stats(overrides: Partial<ServerStats> = {}): ServerStats {
   return {
@@ -47,6 +50,42 @@ describe("normalizeDockerRuntimeStats", () => {
       memoryPercent: 0,
       netRxKBs: 0,
       netTxKBs: 200,
+    });
+  });
+});
+
+function dockerInstance(engine: "stratum" | "vanilla"): Instance {
+  return {
+    id: "hub",
+    name: "Hub",
+    game: "vintage-story",
+    development: false,
+    version: "1.22.3",
+    port: 42420,
+    dataPath: "/tmp/hub/vintage",
+    runtime: "docker",
+    serverEngine: engine,
+    docker: { containerName: "vs-hub", image: "mcr.microsoft.com/dotnet/runtime:10.0", network: "slutvival-net" },
+    resources: { memoryLimitMB: 4096, cpuLimit: 2 },
+    maxPlayers: 16,
+    passwordProtected: false,
+    publicAdvertised: false,
+    autoRestart: false,
+    autoBackup: true,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
+describe("backendPortBindings", () => {
+  it("does not publish Stratum backend ports", () => {
+    expect(backendPortBindings(dockerInstance("stratum"))).toEqual({});
+  });
+
+  it("keeps vanilla fallback ports published", () => {
+    expect(backendPortBindings(dockerInstance("vanilla"))).toEqual({
+      "42420/tcp": [{ HostPort: "42420" }],
+      "42420/udp": [{ HostPort: "42420" }],
     });
   });
 });

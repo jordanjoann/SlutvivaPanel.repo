@@ -262,10 +262,7 @@ export class DockerRuntime implements Runtime {
 
     await ensureInstanceDockerFiles(this.instance);
     const port = String(this.instance.port);
-    const portBindings = {
-      [`${port}/tcp`]: [{ HostPort: port }],
-      [`${port}/udp`]: [{ HostPort: port }],
-    };
+    const portBindings = backendPortBindings(this.instance);
     await docker().createContainer({
       name: this.instance.docker.containerName,
       Image: this.image(),
@@ -312,7 +309,6 @@ export class DockerRuntime implements Runtime {
   private needsRecreate(info: DockerInspect): boolean {
     const mounts = dockerMounts(this.instance);
     const binds = info.HostConfig.Binds ?? [];
-    const port = String(this.instance.port);
     const ports = info.HostConfig.PortBindings ?? {};
     const command = info.Config.Cmd ?? [];
 
@@ -320,8 +316,7 @@ export class DockerRuntime implements Runtime {
       info.Config.Image !== this.image() ||
       info.HostConfig.NetworkMode !== this.instance.docker.network ||
       !mounts.every((mount) => binds.includes(mount)) ||
-      ports[`${port}/tcp`]?.[0]?.HostPort !== port ||
-      ports[`${port}/udp`]?.[0]?.HostPort !== port ||
+      JSON.stringify(ports) !== JSON.stringify(backendPortBindings(this.instance)) ||
       command.join("\0") !== dockerCommand(this.instance).join("\0")
     );
   }
@@ -410,6 +405,17 @@ export function normalizeDockerRuntimeStats(
     diskUsedMB,
     diskTotalMB,
     threads: finiteOrZero(stats.threads),
+  };
+}
+
+export function backendPortBindings(
+  inst: Instance,
+): Record<string, Array<{ HostPort?: string }>> {
+  const port = String(inst.port);
+  if (inst.game === "vintage-story" && inst.serverEngine === "stratum") return {};
+  return {
+    [`${port}/tcp`]: [{ HostPort: port }],
+    [`${port}/udp`]: [{ HostPort: port }],
   };
 }
 
