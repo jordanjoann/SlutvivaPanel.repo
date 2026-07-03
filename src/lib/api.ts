@@ -12,6 +12,8 @@ import type {
   Player,
   PowerAction,
   ServerSettings,
+  VintageStoryNetworkSetupResult,
+  VintageStoryNetworkStatus,
   WorldInfo,
 } from "./types";
 
@@ -163,6 +165,12 @@ export const api = {
   vintageStory: {
     versions: () =>
       fetcher<{ versions: GameVersion[] }>("/api/vintage-story/versions"),
+    network: {
+      status: () =>
+        fetcher<VintageStoryNetworkStatus>("/api/vintage-story/network"),
+      setup: () =>
+        send<VintageStoryNetworkSetupResult>("/api/vintage-story/network", "POST"),
+    },
   },
 
   versions: {
