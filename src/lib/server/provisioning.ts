@@ -10,6 +10,7 @@ import {
   instanceDir,
   instanceServerPath,
 } from "./config";
+import { ensureStratumArtifact } from "./vintage-network/artifacts";
 import { packageUrl } from "./versions";
 
 const execFileAsync = promisify(execFile);
@@ -26,8 +27,15 @@ export function dockerServiceName(inst: Instance): string {
   return inst.game === "vintage-story" ? "vintage-story" : inst.id;
 }
 
-export function dockerCommand(): string[] {
+export function dockerCommand(inst: Instance): string[] {
+  if (inst.serverEngine === "stratum") {
+    return ["./StratumServer", "--dataPath", "/data"];
+  }
   return ["dotnet", "VintagestoryServer.dll", "--dataPath", "/data"];
+}
+
+export function serverInstallMarkerValue(inst: Instance): string {
+  return `${inst.serverEngine}:${inst.version}`;
 }
 
 export async function ensureInstanceDockerFiles(inst: Instance): Promise<void> {
@@ -58,7 +66,20 @@ export async function ensureServerInstalled(
   options: { force?: boolean; onLog?: (message: string) => void } = {},
 ): Promise<void> {
   const installDir = instanceServerPath(inst.id);
-  if (!options.force && (await hasInstalledVersion(installDir, inst.version))) {
+
+  if (inst.serverEngine === "stratum") {
+    await ensureStratumServerInstalled(inst, options);
+    return;
+  }
+
+  if (
+    !options.force &&
+    (await hasInstalledVersion(
+      installDir,
+      serverInstallMarkerValue(inst),
+      "VintagestoryServer.dll",
+    ))
+  ) {
     await ensureInstanceDockerFiles(inst);
     return;
   }
@@ -79,7 +100,7 @@ export async function ensureServerInstalled(
     options.onLog?.(`[Install] Extracting Vintage Story ${inst.version}.`);
     await execFileAsync("tar", ["-xzf", archivePath, "-C", extractDir]);
     await validateServerInstall(extractDir);
-    await fs.writeFile(path.join(extractDir, VERSION_MARKER), `${inst.version}\n`, "utf8");
+    await fs.writeFile(path.join(extractDir, VERSION_MARKER), `${serverInstallMarkerValue(inst)}\n`, "utf8");
     await fs.rm(installDir, { recursive: true, force: true });
     await fs.rename(extractDir, installDir);
     await ensureInstanceDockerFiles(inst);
@@ -89,11 +110,52 @@ export async function ensureServerInstalled(
   }
 }
 
-async function hasInstalledVersion(installDir: string, version: string): Promise<boolean> {
-  if (!existsSync(path.join(installDir, "VintagestoryServer.dll"))) return false;
+async function ensureStratumServerInstalled(
+  inst: Instance,
+  options: { force?: boolean; onLog?: (message: string) => void } = {},
+): Promise<void> {
+  const installDir = instanceServerPath(inst.id);
+  if (
+    !options.force &&
+    (await hasInstalledVersion(
+      installDir,
+      serverInstallMarkerValue(inst),
+      "StratumServer",
+    ))
+  ) {
+    await ensureInstanceDockerFiles(inst);
+    return;
+  }
+
+  options.onLog?.(`[Install] Installing Stratum ${inst.version}.`);
+  const artifactDir = await ensureStratumArtifact();
+  const tmpRoot = path.join(instanceDir(inst.id), `.server-install-stratum-${Date.now()}`);
+  const extractDir = path.join(tmpRoot, "server");
+
+  await fs.rm(tmpRoot, { recursive: true, force: true });
+  await fs.mkdir(extractDir, { recursive: true });
+
+  try {
+    await fs.copyFile(path.join(artifactDir, "StratumServer"), path.join(extractDir, "StratumServer"));
+    await fs.chmod(path.join(extractDir, "StratumServer"), 0o755);
+    await fs.writeFile(path.join(extractDir, VERSION_MARKER), `${serverInstallMarkerValue(inst)}\n`, "utf8");
+    await fs.rm(installDir, { recursive: true, force: true });
+    await fs.rename(extractDir, installDir);
+    await ensureInstanceDockerFiles(inst);
+  } finally {
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  }
+}
+
+async function hasInstalledVersion(
+  installDir: string,
+  markerValue: string,
+  requiredFile: string,
+): Promise<boolean> {
+  if (!existsSync(path.join(installDir, requiredFile))) return false;
   try {
     const marker = await fs.readFile(path.join(installDir, VERSION_MARKER), "utf8");
-    return marker.trim() === version;
+    return marker.trim() === markerValue;
   } catch {
     return false;
   }
@@ -128,7 +190,7 @@ function dockerCompose(inst: Instance): string {
     `    container_name: ${inst.docker.containerName}`,
     "    restart: unless-stopped",
     "    working_dir: /server",
-    '    command: ["dotnet", "VintagestoryServer.dll", "--dataPath", "/data"]',
+    `    command: ${JSON.stringify(dockerCommand(inst))}`,
     "    stdin_open: true",
     "    tty: false",
     cpus.trimEnd(),
@@ -163,9 +225,9 @@ function quoteEnv(value: string): string {
 }
 
 export function dockerMounts(inst: Instance): string[] {
+  const serverMode = inst.serverEngine === "stratum" ? "rw" : "ro";
   return [
-    `${instanceServerPath(inst.id)}:/server:ro`,
+    `${instanceServerPath(inst.id)}:/server:${serverMode}`,
     `${instanceDataPath(inst.id)}:/data:rw`,
   ];
 }
-

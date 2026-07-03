@@ -270,7 +270,7 @@ export class DockerRuntime implements Runtime {
       name: this.instance.docker.containerName,
       Image: this.image(),
       WorkingDir: "/server",
-      Cmd: dockerCommand(),
+      Cmd: dockerCommand(this.instance),
       OpenStdin: true,
       AttachStdin: true,
       Tty: false,
@@ -322,7 +322,7 @@ export class DockerRuntime implements Runtime {
       !mounts.every((mount) => binds.includes(mount)) ||
       ports[`${port}/tcp`]?.[0]?.HostPort !== port ||
       ports[`${port}/udp`]?.[0]?.HostPort !== port ||
-      command.join("\0") !== dockerCommand().join("\0")
+      command.join("\0") !== dockerCommand(this.instance).join("\0")
     );
   }
 
