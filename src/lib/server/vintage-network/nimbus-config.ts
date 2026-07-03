@@ -36,11 +36,10 @@ export function nimbusProxyToml(instances: Instance[], secret: string): string {
 
   return [
     `bind = "0.0.0.0:${config.vintageNetwork.publicPort}"`,
+    `try = ["${tryRoute}"]`,
     "",
     "[servers]",
     ...serverLines,
-    "",
-    `try = ["${tryRoute}"]`,
     "",
     "[registry]",
     'mode = "embedded"',
