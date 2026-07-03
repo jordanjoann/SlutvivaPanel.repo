@@ -50,6 +50,7 @@ export type ServerStatus =
 
 /** How a given instance is actually launched / supervised. */
 export type RuntimeKind = "docker" | "process" | "simulated";
+export type ServerEngine = "stratum" | "vanilla";
 
 export interface InstanceResources {
   /** Hard memory limit handed to the container / process, in MB. */
@@ -84,6 +85,7 @@ export interface Instance {
   dataPath: string;
 
   runtime: RuntimeKind;
+  serverEngine: ServerEngine;
   docker: InstanceDockerConfig;
   resources: InstanceResources;
 
@@ -122,6 +124,23 @@ export interface InstanceRuntimeState {
 /** An instance joined with its current runtime state (list/overview payload). */
 export interface InstanceWithState extends Instance {
   state: InstanceRuntimeState;
+}
+
+export interface VintageStoryNetworkStatus {
+  publicAddress: string;
+  publicHost: string;
+  publicPort: number;
+  registryPort: number;
+  hubExists: boolean;
+  stratumInstalled: boolean;
+  nimbusInstalled: boolean;
+  nimbusConfigured: boolean;
+  nimbusProxyRunning: boolean;
+}
+
+export interface VintageStoryNetworkSetupResult {
+  ok: true;
+  status: VintageStoryNetworkStatus;
 }
 
 /* ------------------------------------------------------------------ */

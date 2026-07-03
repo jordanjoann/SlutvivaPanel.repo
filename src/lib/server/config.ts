@@ -41,6 +41,8 @@ export const config = {
   root: ROOT,
   gamesRoot: path.join(ROOT, "games"),
   vintageStoryRoot: path.join(ROOT, "games", "vintage-story"),
+  toolsRoot: path.join(ROOT, "tools"),
+  secretsRoot: path.join(ROOT, "secrets"),
 
   docker: {
     network: process.env.SLUTVIVAL_DOCKER_NETWORK ?? "slutvival-net",
@@ -54,10 +56,17 @@ export const config = {
 
   domains: {
     panel: process.env.PANEL_DOMAIN ?? "panel.slutvival.com",
+    play: process.env.PLAY_DOMAIN ?? "play.slutvival.com",
     files: "files.slutvival.com",
     logs: "logs.slutvival.com",
     status: "status.slutvival.com",
     grafana: "grafana.slutvival.com",
+  },
+
+  vintageNetwork: {
+    publicHost: process.env.VINTAGE_NETWORK_PUBLIC_HOST ?? "play.slutvival.com",
+    publicPort: Number(process.env.VINTAGE_NETWORK_PUBLIC_PORT ?? 42420),
+    registryPort: Number(process.env.NIMBUS_REGISTRY_PORT ?? 8765),
   },
 
   /** Preferred runtime order. First that is usable wins per instance. */

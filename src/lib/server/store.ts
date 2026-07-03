@@ -42,6 +42,7 @@ function withDefaults(partial: Partial<Instance> & { id: string; name: string })
     port: partial.port ?? 42420,
     dataPath: partial.dataPath ?? instanceDataPath(id),
     runtime: normalizeRuntime(partial.runtime),
+    serverEngine: partial.serverEngine ?? "stratum",
     docker: {
       containerName: docker.containerName ?? `vs-${id}`,
       image: normalizeDockerImage(docker.image),
