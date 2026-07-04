@@ -200,7 +200,13 @@ export async function createInstance(
   if (game === "gta") {
     throw new Error("GTA 5 is managed as a single Los Santos server");
   }
+  if (game !== "vintage-story") {
+    throw new Error(`Game '${game}' is not supported for server creation`);
+  }
   const id = input.id ?? slugId(input.name);
+  if (id === GTA_INSTANCE_ID) {
+    throw new Error(`Server id '${GTA_INSTANCE_ID}' is reserved for GTA 5`);
+  }
   if (await getInstance(id)) throw new Error(`Server '${id}' already exists`);
   const used = await listInstances(game);
   const basePort = defaultPortForGame(game);

@@ -66,6 +66,22 @@ describe("game-aware instance store", () => {
     );
   });
 
+  it("rejects unsupported game creation", async () => {
+    const { createInstance } = await loadStore();
+
+    await expect(createInstance({ name: "Blocks", game: "minecraft" })).rejects.toThrow(
+      "Game 'minecraft' is not supported for server creation",
+    );
+  });
+
+  it("reserves the singleton GTA 5 server id before GTA exists", async () => {
+    const { createInstance } = await loadStore();
+
+    await expect(createInstance({ id: "los-santos", name: "Los Santos", game: "vintage-story" })).rejects.toThrow(
+      "Server id 'los-santos' is reserved for GTA 5",
+    );
+  });
+
   it("preserves Vintage Story defaults under the Vintage Story root", async () => {
     const { createInstance } = await loadStore();
 
