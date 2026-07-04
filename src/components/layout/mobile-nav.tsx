@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Brand } from "./brand";
 import { SidebarNav } from "./sidebar-nav";
+import type { PanelRole } from "@/lib/server/panel-users";
 
-export function MobileNav() {
+export function MobileNav({ role }: { role: PanelRole }) {
   const [open, setOpen] = React.useState(false);
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -23,7 +24,7 @@ export function MobileNav() {
         <div className="flex h-16 items-center px-5">
           <Brand />
         </div>
-        <SidebarNav onNavigate={() => setOpen(false)} />
+        <SidebarNav role={role} onNavigate={() => setOpen(false)} />
       </SheetContent>
     </Sheet>
   );

@@ -13,6 +13,7 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
+import type { PanelRole } from "@/lib/server/panel-users";
 
 export interface NavItem {
   label: string;
@@ -54,3 +55,8 @@ export const NAV: NavGroup[] = [
     ],
   },
 ];
+
+export function visibleNavForRole(role: PanelRole): NavGroup[] {
+  if (role === "owner") return NAV;
+  return [{ items: NAV[0].items.filter((item) => item.href === "/") }];
+}

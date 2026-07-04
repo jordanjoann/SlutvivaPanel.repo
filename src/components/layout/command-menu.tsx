@@ -11,14 +11,16 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { NAV } from "@/lib/nav";
+import { visibleNavForRole } from "@/lib/nav";
 import { useInstances } from "@/hooks/use-instances";
 import { StatusDot } from "@/components/panel/status-badge";
+import type { PanelRole } from "@/lib/server/panel-users";
 
-export function CommandMenu() {
+export function CommandMenu({ role }: { role: PanelRole }) {
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
-  const { data: instances } = useInstances();
+  const { data: instances } = useInstances(role === "owner" ? "vintage-story" : null);
+  const visibleNav = visibleNavForRole(role);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -53,7 +55,7 @@ export function CommandMenu() {
         <CommandInput placeholder="Search servers and pages…" />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
-          {instances && instances.length > 0 && (
+          {role === "owner" && instances && instances.length > 0 && (
             <CommandGroup heading="Vintage Story servers">
               {instances.map((inst) => (
                 <CommandItem
@@ -71,7 +73,7 @@ export function CommandMenu() {
             </CommandGroup>
           )}
           <CommandGroup heading="Navigation">
-            {NAV.flatMap((g) => g.items).map((item) => (
+            {visibleNav.flatMap((g) => g.items).map((item) => (
               <CommandItem
                 key={item.href}
                 value={`page ${item.label}`}

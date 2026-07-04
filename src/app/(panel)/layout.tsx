@@ -13,9 +13,13 @@ export default async function PanelLayout({
 
   return (
     <div className="flex h-dvh overflow-hidden">
-      <Sidebar />
+      <Sidebar role={session.account.role} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar username={session.account.username} />
+        <Topbar
+          username={session.account.username}
+          email={session.account.email}
+          role={session.account.role}
+        />
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
             {children}

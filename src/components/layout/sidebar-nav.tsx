@@ -3,19 +3,27 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NAV } from "@/lib/nav";
+import { visibleNavForRole } from "@/lib/nav";
+import type { PanelRole } from "@/lib/server/panel-users";
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarNav({
+  role,
+  onNavigate,
+}: {
+  role: PanelRole;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
+  const visibleGroups = visibleNavForRole(role);
 
   return (
     <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
-      {NAV.map((group, gi) => (
+      {visibleGroups.map((group, gi) => (
         <div key={gi} className="flex flex-col gap-1">
           {group.label && (
             <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">

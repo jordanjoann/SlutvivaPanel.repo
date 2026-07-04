@@ -21,13 +21,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MobileNav } from "./mobile-nav";
 import { CommandMenu } from "./command-menu";
+import type { PanelRole } from "@/lib/server/panel-users";
 
-export function Topbar({ username }: { username: string }) {
+export function Topbar({
+  username,
+  email,
+  role,
+}: {
+  username: string;
+  email: string;
+  role: PanelRole;
+}) {
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md sm:px-6">
-      <MobileNav />
+      <MobileNav role={role} />
       <div className="flex flex-1 items-center gap-3">
-        <CommandMenu />
+        <CommandMenu role={role} />
       </div>
 
       {/* Notifications */}
@@ -70,15 +79,18 @@ export function Topbar({ username }: { username: string }) {
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel className="flex flex-col gap-0.5 py-1.5">
             <span className="text-sm font-medium text-foreground">{username}</span>
-            <span className="text-xs font-normal text-muted-foreground">Local administrator</span>
+            <span className="text-xs font-normal text-muted-foreground">{email}</span>
+            <span className="text-xs font-normal text-muted-foreground">{roleLabel(role)}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem render={<Link href="/account" />}>
             <UserIcon /> Account
           </DropdownMenuItem>
-          <DropdownMenuItem render={<Link href="/messages" />}>
-            <MessageSquareIcon /> Messages
-          </DropdownMenuItem>
+          {role === "owner" && (
+            <DropdownMenuItem render={<Link href="/messages" />}>
+              <MessageSquareIcon /> Messages
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <LogoutItem />
         </DropdownMenuContent>
@@ -106,6 +118,13 @@ function LogoutItem() {
       <LogOutIcon /> Logout
     </DropdownMenuItem>
   );
+}
+
+function roleLabel(role: PanelRole): string {
+  if (role === "owner") return "Owner";
+  if (role === "admin") return "Admin";
+  if (role === "moderator") return "Moderator";
+  return "Viewer";
 }
 
 function initials(username: string): string {
