@@ -1,11 +1,11 @@
-# GTA / FiveM Bootstrap Design
+# GTA 5 / FiveM Bootstrap Design
 
 Date: 2026-07-04
 Status: Approved design, pending written spec review
 
 ## Context
 
-The panel already has a `gta` game id, a GTA / FiveM sidebar entry, and a coming-soon page. The instance model, store, provisioning, seed config, and runtime launch path are still mostly Vintage Story-specific. GTA should become the next real managed game, but it must stay owner-only for now.
+The panel already has a `gta` game id, a GTA 5 sidebar entry, and a coming-soon page. The instance model, store, provisioning, seed config, and runtime launch path are still mostly Vintage Story-specific. GTA 5 should become the next real managed game, but it must stay owner-only for now.
 
 Relevant upstream references:
 
@@ -19,9 +19,12 @@ The official docs require a Cfx.re license key from the Cfx.re portal. The Linux
 
 ## Decisions
 
-- GTA uses vanilla FXServer first, with txAdmin treated as an owner setup surface rather than a panel-owned automation API.
-- GTA is owner-only in page access, nav, APIs, and instance visibility.
-- The first server layout is `/opt/slutvival/games/gta/<server-id>`.
+- GTA 5 uses vanilla FXServer first, with txAdmin treated as an owner setup surface rather than a panel-owned automation API.
+- GTA 5 is owner-only in page access, nav, APIs, and instance visibility.
+- GTA 5 is a singleton game in the panel. There is exactly one managed GTA 5 server for this first pass.
+- The singleton server id is `los-santos`, and the display name is `Los Santos`.
+- `/gta` opens the singleton server dashboard directly; there is no GTA server picker, create flow, server-card grid, or delete-server flow.
+- The server layout is `/opt/slutvival/games/gta/los-santos`.
 - The first public FiveM port is `30120` TCP/UDP.
 - txAdmin uses `40120` internally or publicly only if the owner intentionally exposes it through the stack.
 - The panel stores no Cfx license key, Steam Web API key, txAdmin password, or txAdmin state in Git.
@@ -30,8 +33,8 @@ The official docs require a Cfx.re license key from the Cfx.re portal. The Linux
 
 ## Goals
 
-- Make GTA / FiveM available to owner sessions in the panel.
-- Create, list, open, start, stop, restart, and delete GTA instances.
+- Make GTA 5 / FiveM available to owner sessions in the panel.
+- Ensure, open, start, stop, and restart the singleton GTA 5 server.
 - Generate a bootable default FXServer directory layout.
 - Generate Docker compose for FXServer with deterministic container names, ports, labels, resources, and volumes.
 - Seed a minimal `server.cfg` based on the official FXServer config shape.
@@ -49,13 +52,15 @@ The official docs require a Cfx.re license key from the Cfx.re portal. The Linux
 - No GTA backup UI/API in the first implementation.
 - No public access for admins, moderators, or viewers.
 - No migration of Vintage Story instance data.
+- No multi-server GTA UI or API workflow.
+- No GTA delete-server action in the panel.
 
 ## Filesystem Layout
 
-GTA instances live under the Slutvival root:
+The GTA 5 singleton lives under the Slutvival root:
 
 ```text
-/opt/slutvival/games/gta/<server-id>/
+/opt/slutvival/games/gta/los-santos/
   server.yml
   docker-compose.yml
   .env
@@ -82,15 +87,17 @@ The outer repo already ignores broad game runtime data. The implementation shoul
 
 ## Instance Model
 
-The existing `GameId` already includes `gta`. The generic `Instance` type can still represent a GTA server with these conventions:
+The existing `GameId` already includes `gta`. The generic `Instance` type can still represent the GTA 5 singleton with these conventions:
 
+- `id: "los-santos"`
+- `name: "Los Santos"`
 - `game: "gta"`
 - `version`: FXServer artifact build number or `"recommended"` before install resolution.
 - `port`: player port, default `30120`.
-- `dataPath`: `/opt/slutvival/games/gta/<server-id>/server-data`.
+- `dataPath`: `/opt/slutvival/games/gta/los-santos/server-data`.
 - `runtime: "docker"`.
 - `serverEngine: "fxserver"`. The `ServerEngine` union becomes `"stratum" | "vanilla" | "fxserver"`.
-- `docker.containerName`: `gta-<server-id>`.
+- `docker.containerName`: `gta-los-santos`.
 - `docker.image`: `slutvival/fxserver-base:bookworm`.
 - `resources`: default to 4096 MB and 2 CPU.
 - `maxPlayers`: default to 48.
@@ -105,6 +112,8 @@ gta           -> /opt/slutvival/games/gta
 `listInstances(game)` reads only the matching game root when a game is provided. `getInstance(id)` searches all known game roots.
 
 Instance ids must remain unique across all game roots. `createInstance` checks all known roots before creating a new id. `getInstance(id)` searches known roots in a deterministic order and returns the matching instance; duplicate ids are treated as a setup error.
+
+The GTA page should use an explicit singleton helper rather than a create dialog. `ensureGtaInstance()` creates the `los-santos` descriptor, compose file, and initial server-data layout when missing, then returns the instance. Calling it repeatedly is safe and updates generated config files without replacing local secrets.
 
 ## Artifact Installation
 
@@ -177,13 +186,13 @@ The implementation adds a small base-image build step before the first GTA conta
 
 ## Panel UI
 
-The GTA page replaces the coming-soon card with an owner-only management page:
+The GTA page replaces the coming-soon card with an owner-only singleton dashboard:
 
-- Header: GTA / FiveM.
-- Description: manage FiveM servers and txAdmin setup.
-- New Server action for owners.
-- Empty state when no GTA servers exist.
-- Instance cards showing status, player capacity, port, artifact build, CPU, and memory.
+- Header: GTA 5.
+- Description: manage the owner-only FiveM / FXServer server and txAdmin setup.
+- `/gta` resolves or creates the `los-santos` instance and renders the server dashboard.
+- The dashboard shows status, player capacity, port, artifact channel/build, CPU, memory, and power controls.
+- There is no New Server action, empty-state prompt, card grid, or delete server action.
 
 The instance detail view can initially reuse a generic server layout rather than copying the Vintage Story route tree. The first owner-only tabs should be:
 
@@ -191,7 +200,6 @@ The instance detail view can initially reuse a generic server layout rather than
 - Console
 - Files
 - Settings, only for basic name/description/max players/port/resource edits
-- Danger Zone
 
 Vintage Story-specific tabs such as World, Mods, and Players should not appear for GTA until there is real GTA behavior behind them.
 
@@ -203,8 +211,8 @@ Required checks:
 
 - `/gta` is visible only to owners.
 - `/api/instances?game=gta` returns data only to owners.
-- Creating a GTA instance requires owner.
-- Reading, starting, stopping, restarting, deleting, editing files, and sending console commands for a GTA instance require owner.
+- Ensuring the singleton GTA instance requires owner.
+- Reading, starting, stopping, restarting, editing files, and sending console commands for the GTA instance require owner.
 - Non-owner attempts receive the same redirect or `403` behavior as other blocked management routes.
 
 The proxy already blocks non-owner GTA paths through `canAccessPagePath` and `canAccessApiPath`. Any API routes touched for generic GTA support must also keep handler-level session checks, especially command and file routes.
@@ -228,7 +236,7 @@ Automated tests should cover:
 - GTA remains owner-only in access policy and visible nav.
 - Non-owner roles cannot access `/gta` or GTA instance APIs.
 - Game-aware root/path resolution for Vintage Story and GTA.
-- GTA instance defaults use port `30120`, `game: "gta"`, `serverEngine: "fxserver"`, and `gta-*` containers.
+- GTA singleton defaults use id `los-santos`, port `30120`, `game: "gta"`, `serverEngine: "fxserver"`, and container `gta-los-santos`.
 - GTA compose includes FXServer command, player port bindings, GTA labels, and server/server-data mounts.
 - GTA compose does not publish txAdmin `40120` by default.
 - GTA base-image build behavior is invoked before Docker container creation when the image is missing.
@@ -238,8 +246,8 @@ Automated tests should cover:
 Manual verification should include:
 
 - Add a real Cfx.re license key to the ignored `server.secret.cfg`.
-- Create a GTA server from the owner panel.
-- Confirm files are created under `/opt/slutvival/games/gta/<server-id>`.
+- Open `/gta` from the owner panel.
+- Confirm files are created under `/opt/slutvival/games/gta/los-santos`.
 - Confirm `docker compose config` succeeds for the generated GTA compose file.
 - Start the server and confirm the container reaches running state.
 - If txAdmin is exposed manually after the first pass, complete its first-run setup and confirm the panel still controls power/logs.
@@ -251,7 +259,7 @@ This should land in small commits:
 
 1. Spec and tests.
 2. Game-aware paths/store/provisioning without changing Vintage Story behavior.
-3. GTA UI and owner-only navigation.
+3. GTA 5 singleton UI and owner-only navigation.
 4. FXServer artifact/server-data bootstrap.
 5. Production runtime bootstrap for the first GTA server.
 

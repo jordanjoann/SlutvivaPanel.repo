@@ -1,8 +1,8 @@
-# GTA / FiveM Bootstrap Implementation Plan
+# GTA 5 / FiveM Bootstrap Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an owner-only GTA / FiveM management path that can create and run vanilla FXServer instances from the panel.
+**Goal:** Add an owner-only GTA 5 / FiveM management path that ensures and runs one singleton vanilla FXServer instance from the panel.
 
 **Architecture:** Split the existing Vintage Story assumptions at the game path, store, provisioning, and Docker-preflight seams. Keep the Docker runtime as the shared control plane while game-specific helpers provide commands, mounts, install checks, config seeding, and secret validation.
 
@@ -12,20 +12,19 @@
 
 ## Scope Check
 
-The approved spec covers one cohesive subsystem: owner-only GTA/FiveM server bootstrap. It touches access control, game-aware storage, provisioning, Docker runtime startup, UI, and deployment verification, but each task below produces working, testable progress without requiring an unrelated subsystem.
+The approved spec covers one cohesive subsystem: owner-only GTA 5/FiveM server bootstrap. It touches access control, game-aware storage, singleton provisioning, Docker runtime startup, UI, and deployment verification, but each task below produces working, testable progress without requiring an unrelated subsystem.
 
 ## File Structure
 
 - Modify `src/lib/types.ts`: add `fxserver` to `ServerEngine`.
-- Modify `src/lib/games.ts`: mark GTA available.
-- Modify `src/lib/nav.ts`: mark GTA available and remove the "Soon" badge.
+- Create `src/lib/gta.ts`: shared singleton id, display name, and Docker image constants.
+- Modify `src/lib/games.ts`: mark GTA 5 available.
+- Modify `src/lib/nav.ts`: mark GTA 5 available and remove the "Soon" badge.
 - Modify `src/lib/access.test.ts`: lock owner-only GTA behavior.
-- Modify `src/app/(panel)/gta/page.tsx`: replace coming-soon with owner GTA instance list.
-- Create `src/components/gta/create-gta-server-dialog.tsx`: small owner create dialog for GTA.
-- Modify `src/components/vintage-story/instance-card.tsx`: add `baseHref` prop so the card can link to `/gta/<id>` without duplicating the whole card.
+- Modify `src/app/(panel)/gta/page.tsx`: replace coming-soon with the singleton GTA 5 dashboard entry point.
 - Modify `src/lib/server/config.ts`: add game-aware root/path helpers while preserving Vintage Story helper names.
-- Modify `src/lib/server/store.ts`: read and create instances across known game roots.
-- Add `src/lib/server/store.test.ts`: game-aware create/list/get coverage.
+- Modify `src/lib/server/store.ts`: read instances across known game roots and ensure the singleton GTA 5 instance.
+- Add `src/lib/server/store.test.ts`: game-aware list/get coverage and singleton GTA 5 ensure coverage.
 - Modify `src/lib/server/provisioning.ts`: branch commands, mounts, compose, env, install markers, and Docker image defaults by game.
 - Modify `src/lib/server/provisioning.test.ts`: GTA compose and Vintage Story regression tests.
 - Create `src/lib/server/gta/artifacts.ts`: resolve and install recommended FXServer Linux artifacts.
@@ -42,17 +41,17 @@ The approved spec covers one cohesive subsystem: owner-only GTA/FiveM server boo
 - Modify `src/app/api/instances/[id]/files/route.ts`: add session and game access checks for every method.
 - Add `src/app/api/instances/[id]/command/route.test.ts`: handler-level owner-only command coverage.
 - Add `src/app/api/instances/[id]/files/route.test.ts`: handler-level owner-only files coverage.
-- Create `src/app/(panel)/gta/[id]/layout.tsx`: GTA instance header and tabs.
-- Create `src/app/(panel)/gta/[id]/page.tsx`: overview cards.
-- Create `src/app/(panel)/gta/[id]/console/page.tsx`: existing console view.
-- Create `src/app/(panel)/gta/[id]/files/page.tsx`: existing file manager.
+- Modify `src/app/(panel)/gta/page.tsx`: singleton ensure and redirect to `/gta/los-santos`.
+- Create `src/app/(panel)/gta/[id]/layout.tsx`: singleton GTA 5 header and tabs.
+- Create `src/app/(panel)/gta/[id]/page.tsx`: singleton overview dashboard.
+- Create `src/app/(panel)/gta/[id]/console/page.tsx`: existing console view for `los-santos`.
+- Create `src/app/(panel)/gta/[id]/files/page.tsx`: existing file manager for `los-santos`.
 - Create `src/app/(panel)/gta/[id]/settings/page.tsx`: basic instance edits.
-- Create `src/app/(panel)/gta/[id]/danger/page.tsx`: delete server.
 - Modify outer repo `.gitignore` before runtime verification: ignore `games/**/server-data/`.
 
 ---
 
-### Task 1: Owner-Only GTA Availability
+### Task 1: Owner-Only GTA 5 Availability
 
 **Files:**
 - Modify: `src/lib/access.test.ts`
@@ -64,7 +63,7 @@ The approved spec covers one cohesive subsystem: owner-only GTA/FiveM server boo
 Add this test to `src/lib/access.test.ts` after the existing nav test:
 
 ```ts
-  it("keeps GTA owner-only while showing it as available to owners", () => {
+  it("keeps GTA 5 owner-only while showing it as available to owners", () => {
     expect(canAccessPagePath("owner", "/gta")).toBe(true);
     expect(canAccessApiPath("owner", "/api/instances")).toBe(true);
     expect(canAccessInstanceGame("owner", "gta")).toBe(true);
@@ -93,16 +92,16 @@ Run:
 npx -y node@22 node_modules/vitest/vitest.mjs run src/lib/access.test.ts
 ```
 
-Expected: FAIL because the owner GTA nav item still has `badge: "Soon"` and no `available: true`.
+Expected: FAIL because the owner GTA 5 nav item still has `badge: "Soon"` and no `available: true`.
 
-- [ ] **Step 3: Mark GTA available**
+- [ ] **Step 3: Mark GTA 5 available**
 
 In `src/lib/games.ts`, change the GTA entry to:
 
 ```ts
   gta: {
     id: "gta",
-    name: "GTA / FiveM",
+    name: "GTA 5",
     tagline: "Roleplay and racing servers on FiveM.",
     available: true,
     accent: "#e6b566",
@@ -112,7 +111,7 @@ In `src/lib/games.ts`, change the GTA entry to:
 In `src/lib/nav.ts`, change the GTA nav item to:
 
 ```ts
-      { label: "GTA / FiveM", href: "/gta", icon: Car, available: true },
+      { label: "GTA 5", href: "/gta", icon: Car, available: true },
 ```
 
 - [ ] **Step 4: Run the access test and verify it passes**
@@ -129,7 +128,7 @@ Expected: PASS.
 
 ```bash
 git add src/lib/access.test.ts src/lib/games.ts src/lib/nav.ts
-git commit -m "feat: make GTA owner-only available"
+git commit -m "feat: make GTA 5 owner-only available"
 ```
 
 ---
@@ -138,6 +137,7 @@ git commit -m "feat: make GTA owner-only available"
 
 **Files:**
 - Modify: `src/lib/types.ts`
+- Create: `src/lib/gta.ts`
 - Modify: `src/lib/server/config.ts`
 - Modify: `src/lib/server/store.ts`
 - Add: `src/lib/server/store.test.ts`
@@ -170,12 +170,14 @@ afterEach(async () => {
 });
 
 describe("game-aware instance store", () => {
-  it("creates GTA instances under the GTA root with FXServer defaults", async () => {
-    const { createInstance, listInstances, getInstance } = await loadStore();
+  it("ensures the singleton GTA 5 instance under the GTA root with FXServer defaults", async () => {
+    const { ensureGtaInstance, listInstances, getInstance } = await loadStore();
 
-    const created = await createInstance({ name: "Los Santos", game: "gta" });
+    const created = await ensureGtaInstance();
 
     expect(created).toMatchObject({
+      id: "los-santos",
+      name: "Los Santos",
       game: "gta",
       version: "recommended",
       port: 30120,
@@ -183,20 +185,32 @@ describe("game-aware instance store", () => {
       serverEngine: "fxserver",
       maxPlayers: 48,
       docker: {
-        containerName: `gta-${created.id}`,
+        containerName: "gta-los-santos",
         image: "slutvival/fxserver-base:bookworm",
         network: "slutvival-net",
       },
       resources: { memoryLimitMB: 4096, cpuLimit: 2 },
     });
-    expect(created.dataPath).toBe(path.join(root, "games", "gta", created.id, "server-data"));
+    expect(created.dataPath).toBe(path.join(root, "games", "gta", "los-santos", "server-data"));
 
-    await expect(fs.stat(path.join(root, "games", "gta", created.id, "server.yml"))).resolves.toBeTruthy();
-    await expect(fs.stat(path.join(root, "games", "gta", created.id, "server-data", "server.cfg"))).resolves.toBeTruthy();
+    await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "server.yml"))).resolves.toBeTruthy();
+    await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "server-data"))).resolves.toBeTruthy();
 
     expect(await listInstances("gta")).toHaveLength(1);
     expect(await listInstances("vintage-story")).toHaveLength(0);
-    expect((await getInstance(created.id))?.game).toBe("gta");
+    expect((await getInstance("los-santos"))?.game).toBe("gta");
+
+    const again = await ensureGtaInstance();
+    expect(again.id).toBe("los-santos");
+    expect(await listInstances("gta")).toHaveLength(1);
+  });
+
+  it("does not create arbitrary additional GTA 5 instances", async () => {
+    const { createInstance } = await loadStore();
+
+    await expect(createInstance({ name: "Second City", game: "gta" })).rejects.toThrow(
+      "GTA 5 is managed as a single Los Santos server",
+    );
   });
 
   it("preserves Vintage Story defaults under the Vintage Story root", async () => {
@@ -224,7 +238,7 @@ Run:
 npx -y node@22 node_modules/vitest/vitest.mjs run src/lib/server/store.test.ts
 ```
 
-Expected: FAIL because `fxserver` is not a valid `ServerEngine`, store paths are Vintage Story-only, and GTA defaults do not exist.
+Expected: FAIL because `fxserver` is not a valid `ServerEngine`, store paths are Vintage Story-only, and `ensureGtaInstance` does not exist.
 
 - [ ] **Step 3: Add game-aware path helpers**
 
@@ -325,6 +339,27 @@ import {
 } from "./config";
 ```
 
+Create `src/lib/gta.ts`:
+
+```ts
+export const GTA_INSTANCE_ID = "los-santos";
+export const GTA_INSTANCE_NAME = "Los Santos";
+export const GTA_GAME_LABEL = "GTA 5";
+export const GTA_INSTANCE_DESCRIPTION = "Private Slutvival FiveM server.";
+export const GTA_DOCKER_IMAGE = "slutvival/fxserver-base:bookworm";
+```
+
+In `src/lib/server/store.ts`, import:
+
+```ts
+import {
+  GTA_DOCKER_IMAGE,
+  GTA_INSTANCE_DESCRIPTION,
+  GTA_INSTANCE_ID,
+  GTA_INSTANCE_NAME,
+} from "@/lib/gta";
+```
+
 Add helper functions near defaults:
 
 ```ts
@@ -344,7 +379,7 @@ function defaultDockerForGame(game: GameId, id: string): Instance["docker"] {
   if (game === "gta") {
     return {
       containerName: `gta-${id}`,
-      image: "slutvival/fxserver-base:bookworm",
+      image: GTA_DOCKER_IMAGE,
       network: config.docker.network,
     };
   }
@@ -492,6 +527,9 @@ export async function createInstance(
 ): Promise<Instance> {
   await initializeIfNeeded();
   const game = input.game ?? "vintage-story";
+  if (game === "gta") {
+    throw new Error("GTA 5 is managed as a single Los Santos server");
+  }
   const id = input.id ?? slugId(input.name);
   if (await getInstance(id)) throw new Error(`Server '${id}' already exists`);
   const used = await listInstances(game);
@@ -511,6 +549,41 @@ export async function createInstance(
   await writeInstance(inst);
   await ensureInstanceDockerFiles(inst);
   await seedInstanceContent(inst, input);
+  return inst;
+}
+```
+
+Add the singleton helper:
+
+```ts
+export async function ensureGtaInstance(): Promise<Instance> {
+  await initializeIfNeeded();
+  const existing = await readInstance("gta", GTA_INSTANCE_ID);
+  if (existing) {
+    await ensureInstanceDirs(existing);
+    await ensureInstanceDockerFiles(existing);
+    return existing;
+  }
+
+  const inst = withDefaults({
+    id: GTA_INSTANCE_ID,
+    name: GTA_INSTANCE_NAME,
+    game: "gta",
+    description: GTA_INSTANCE_DESCRIPTION,
+    port: 30120,
+    version: "recommended",
+    runtime: "docker",
+    serverEngine: "fxserver",
+    dataPath: instanceDataPathForGame("gta", GTA_INSTANCE_ID),
+    docker: defaultDockerForGame("gta", GTA_INSTANCE_ID),
+    resources: { memoryLimitMB: 4096, cpuLimit: 2 },
+    maxPlayers: 48,
+    autoRestart: false,
+    autoBackup: false,
+  });
+  await ensureInstanceDirs(inst);
+  await writeInstance(inst);
+  await ensureInstanceDockerFiles(inst);
   return inst;
 }
 ```
@@ -597,7 +670,7 @@ function gtaInstance(): Instance {
 Add tests:
 
 ```ts
-  it("uses the FXServer command for GTA instances", () => {
+  it("uses the FXServer command for the GTA 5 singleton", () => {
     expect(dockerCommand(gtaInstance())).toEqual(["bash", "/server/run.sh", "+exec", "server.cfg"]);
   });
 
@@ -1657,210 +1730,32 @@ git commit -m "fix: enforce owner access on generic instance routes"
 
 ---
 
-### Task 7: GTA Owner UI
+### Task 7: GTA 5 Singleton Owner UI
 
 **Files:**
 - Modify: `src/app/(panel)/gta/page.tsx`
-- Create: `src/components/gta/create-gta-server-dialog.tsx`
-- Modify: `src/components/vintage-story/instance-card.tsx`
 - Create: `src/app/(panel)/gta/[id]/layout.tsx`
 - Create: `src/app/(panel)/gta/[id]/page.tsx`
 - Create: `src/app/(panel)/gta/[id]/console/page.tsx`
 - Create: `src/app/(panel)/gta/[id]/files/page.tsx`
 - Create: `src/app/(panel)/gta/[id]/settings/page.tsx`
-- Create: `src/app/(panel)/gta/[id]/danger/page.tsx`
 
-- [ ] **Step 1: Make instance cards reusable**
-
-In `src/components/vintage-story/instance-card.tsx`, change the props:
-
-```ts
-export function InstanceCard({
-  instance,
-  hasFullAccess,
-  baseHref = "/vintage-story",
-}: {
-  instance: InstanceWithState;
-  hasFullAccess: boolean;
-  baseHref?: string;
-}) {
-```
-
-Add:
-
-```ts
-  const href = `${baseHref}/${instance.id}`;
-```
-
-Replace both hard-coded links with `href`:
-
-```tsx
-      <Link href={href} className="absolute inset-0 z-0" aria-hidden="true" tabIndex={-1} />
-```
-
-and:
-
-```tsx
-          render={<Link href={href} aria-label={`Manage ${instance.name}`} />}
-```
-
-- [ ] **Step 2: Create GTA server dialog**
-
-Create `src/components/gta/create-gta-server-dialog.tsx`:
-
-```tsx
-"use client";
-
-import * as React from "react";
-import { useRouter } from "next/navigation";
-import { useSWRConfig } from "swr";
-import { toast } from "sonner";
-import { Loader2Icon, PlusIcon } from "lucide-react";
-import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-
-export function CreateGtaServerDialog() {
-  const [open, setOpen] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
-  const [name, setName] = React.useState("Los Santos");
-  const [description, setDescription] = React.useState("Private Slutvival FiveM server.");
-  const [maxPlayers, setMaxPlayers] = React.useState("48");
-  const router = useRouter();
-  const { mutate } = useSWRConfig();
-
-  async function submit() {
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      toast.error("Enter a server name");
-      return;
-    }
-
-    try {
-      setBusy(true);
-      const created = await api.instances.create({
-        name: trimmedName,
-        game: "gta",
-        description: description.trim(),
-        maxPlayers: Number.parseInt(maxPlayers, 10) || 48,
-        resources: { memoryLimitMB: 4096, cpuLimit: 2 },
-      });
-      await mutate((key) => Array.isArray(key) && key[0] === "instances");
-      toast.success(`Server "${created.name}" created`);
-      setOpen(false);
-      router.push(`/gta/${created.id}`);
-    } catch (error) {
-      toast.error("Failed to create GTA server", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button />}>
-        <PlusIcon /> New Server
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New GTA / FiveM server</DialogTitle>
-          <DialogDescription>
-            Creates a vanilla FXServer layout. Add the Cfx.re license key before starting it.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="gta-name">Name</Label>
-            <Input id="gta-name" value={name} onChange={(event) => setName(event.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="gta-description">Description</Label>
-            <Textarea id="gta-description" value={description} onChange={(event) => setDescription(event.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="gta-max-players">Max players</Label>
-            <Input id="gta-max-players" inputMode="numeric" value={maxPlayers} onChange={(event) => setMaxPlayers(event.target.value)} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={busy}>
-            {busy ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
-            Create
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-```
-
-- [ ] **Step 3: Replace GTA coming-soon page**
+- [ ] **Step 1: Replace the GTA index with singleton ensure plus redirect**
 
 Replace `src/app/(panel)/gta/page.tsx` with:
 
 ```tsx
-"use client";
+import { redirect } from "next/navigation";
+import { GTA_INSTANCE_ID } from "@/lib/gta";
+import { ensureGtaInstance } from "@/lib/server/store";
 
-import { CarIcon, ServerIcon } from "lucide-react";
-import { useInstances } from "@/hooks/use-instances";
-import { PageHeader } from "@/components/panel/page-header";
-import { EmptyState } from "@/components/panel/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
-import { InstanceCard } from "@/components/vintage-story/instance-card";
-import { CreateGtaServerDialog } from "@/components/gta/create-gta-server-dialog";
-
-export default function GtaPage() {
-  const { data: instances, isLoading } = useInstances("gta");
-
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="GTA / FiveM"
-        description="Manage owner-only FiveM servers, FXServer startup, console logs, and files."
-        icon={CarIcon}
-        actions={<CreateGtaServerDialog />}
-      />
-
-      {isLoading && !instances ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <Skeleton key={index} className="h-56 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : instances && instances.length === 0 ? (
-        <EmptyState
-          icon={ServerIcon}
-          title="No GTA servers yet"
-          description="Create a vanilla FXServer instance, then add the Cfx.re license key before starting it."
-          action={<CreateGtaServerDialog />}
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {(instances ?? []).map((instance) => (
-            <InstanceCard key={instance.id} instance={instance} hasFullAccess baseHref="/gta" />
-          ))}
-        </div>
-      )}
-    </div>
-  );
+export default async function GtaPage() {
+  await ensureGtaInstance();
+  redirect(`/gta/${GTA_INSTANCE_ID}`);
 }
 ```
 
-- [ ] **Step 4: Create GTA instance layout**
+- [ ] **Step 2: Create the singleton GTA layout**
 
 Create `src/app/(panel)/gta/[id]/layout.tsx`:
 
@@ -1869,58 +1764,54 @@ Create `src/app/(panel)/gta/[id]/layout.tsx`:
 
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { CarIcon, ChevronLeftIcon, ClockIcon, PlugIcon } from "lucide-react";
+import { CarIcon, ClockIcon, PlugIcon } from "lucide-react";
+import { GTA_INSTANCE_ID } from "@/lib/gta";
 import { useInstance } from "@/hooks/use-instances";
 import { cn } from "@/lib/utils";
-import { StatusBadge } from "@/components/panel/status-badge";
-import { PowerControls } from "@/components/panel/power-controls";
-import { Skeleton } from "@/components/ui/skeleton";
 import { formatDuration } from "@/lib/format";
+import { PowerControls } from "@/components/panel/power-controls";
+import { StatusBadge } from "@/components/panel/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const TABS = [
   { key: "overview", label: "Overview", segment: "" },
   { key: "console", label: "Console", segment: "console" },
   { key: "files", label: "Files", segment: "files" },
   { key: "settings", label: "Settings", segment: "settings" },
-  { key: "danger", label: "Danger Zone", segment: "danger", danger: true },
 ] as const;
 
 export default function GtaServerLayout({ children }: { children: React.ReactNode }) {
   const { id } = useParams<{ id: string }>();
   const pathname = usePathname();
-  const { data: instance } = useInstance(id);
-  const base = `/gta/${id}`;
+  const { data: instance } = useInstance(id || GTA_INSTANCE_ID);
+  const base = `/gta/${id || GTA_INSTANCE_ID}`;
   const status = instance?.state.status ?? "unknown";
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-4">
-        <Link href="/gta" className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ChevronLeftIcon className="size-4" /> GTA / FiveM
-        </Link>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
-              <CarIcon className="size-5" />
-            </div>
-            {instance ? (
-              <div className="min-w-0">
-                <div className="flex items-center gap-3">
-                  <h1 className="truncate font-heading text-xl font-semibold tracking-tight">{instance.name}</h1>
-                  <StatusBadge status={status} />
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span className="font-mono">FXServer {instance.version}</span>
-                  <span className="inline-flex items-center gap-1.5"><PlugIcon className="size-3.5" /> Port {instance.port}</span>
-                  <span className="inline-flex items-center gap-1.5"><ClockIcon className="size-3.5" /> {formatDuration(instance.state.uptimeSeconds)}</span>
-                </div>
-              </div>
-            ) : (
-              <Skeleton className="h-12 w-64" />
-            )}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20">
+            <CarIcon className="size-5" />
           </div>
-          <PowerControls id={id} status={status} />
+          {instance ? (
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="font-heading text-xl font-semibold tracking-tight">GTA 5</h1>
+                <StatusBadge status={status} />
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span>{instance.name}</span>
+                <span className="font-mono">FXServer {instance.version}</span>
+                <span className="inline-flex items-center gap-1.5"><PlugIcon className="size-3.5" /> Port {instance.port}</span>
+                <span className="inline-flex items-center gap-1.5"><ClockIcon className="size-3.5" /> {formatDuration(instance.state.uptimeSeconds)}</span>
+              </div>
+            </div>
+          ) : (
+            <Skeleton className="h-12 w-64" />
+          )}
         </div>
+        <PowerControls id={id || GTA_INSTANCE_ID} status={status} />
       </div>
 
       <nav className="flex gap-1 overflow-x-auto border-b border-border">
@@ -1936,7 +1827,6 @@ export default function GtaServerLayout({ children }: { children: React.ReactNod
                 active
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground",
-                tab.danger && "text-destructive hover:text-destructive",
               )}
             >
               {tab.label}
@@ -1950,7 +1840,7 @@ export default function GtaServerLayout({ children }: { children: React.ReactNod
 }
 ```
 
-- [ ] **Step 5: Create GTA overview page**
+- [ ] **Step 3: Create the singleton overview page**
 
 Create `src/app/(panel)/gta/[id]/page.tsx`:
 
@@ -1960,9 +1850,9 @@ Create `src/app/(panel)/gta/[id]/page.tsx`:
 import { CpuIcon, HardDriveIcon, MemoryStickIcon, PlugIcon, UsersIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useInstance } from "@/hooks/use-instances";
+import { formatMB, formatPercent } from "@/lib/format";
 import { StatCard } from "@/components/panel/stat-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatMB, formatPercent } from "@/lib/format";
 
 export default function GtaOverviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -1972,7 +1862,7 @@ export default function GtaOverviewPage() {
     return (
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {Array.from({ length: 5 }).map((_, index) => (
-          <Skeleton key={index} className="h-[104px] rounded-xl" />
+          <Skeleton key={index} className="h-[104px] rounded-lg" />
         ))}
       </div>
     );
@@ -1991,7 +1881,7 @@ export default function GtaOverviewPage() {
 }
 ```
 
-- [ ] **Step 6: Create GTA console and files pages**
+- [ ] **Step 4: Create console and files pages**
 
 Create `src/app/(panel)/gta/[id]/console/page.tsx`:
 
@@ -2014,8 +1904,8 @@ Create `src/app/(panel)/gta/[id]/files/page.tsx`:
 
 import { useParams } from "next/navigation";
 import { FolderIcon } from "lucide-react";
-import { PageHeader } from "@/components/panel/page-header";
 import { FileManager } from "@/components/vintage-story/file-manager";
+import { PageHeader } from "@/components/panel/page-header";
 
 export default function GtaFilesPage() {
   const { id } = useParams<{ id: string }>();
@@ -2028,7 +1918,7 @@ export default function GtaFilesPage() {
 }
 ```
 
-- [ ] **Step 7: Create GTA settings page**
+- [ ] **Step 5: Create settings page without delete controls**
 
 Create `src/app/(panel)/gta/[id]/settings/page.tsx`:
 
@@ -2074,7 +1964,7 @@ export default function GtaSettingsPage() {
         maxPlayers: Number.parseInt(maxPlayers, 10) || instance.maxPlayers,
       });
       await mutate();
-      toast.success("GTA server settings saved");
+      toast.success("GTA 5 settings saved");
     } catch (error) {
       toast.error("Failed to save settings", { description: error instanceof Error ? error.message : undefined });
     } finally {
@@ -2082,7 +1972,7 @@ export default function GtaSettingsPage() {
     }
   }
 
-  if (!instance) return <Skeleton className="h-64 rounded-xl" />;
+  if (!instance) return <Skeleton className="h-64 rounded-lg" />;
 
   return (
     <div className="flex flex-col gap-5">
@@ -2101,11 +1991,9 @@ export default function GtaSettingsPage() {
             <Label htmlFor="gta-settings-max-players">Max players</Label>
             <Input id="gta-settings-max-players" inputMode="numeric" value={maxPlayers} onChange={(event) => setMaxPlayers(event.target.value)} />
           </div>
-          <div>
-            <Button onClick={save} disabled={busy}>
-              <SaveIcon /> Save changes
-            </Button>
-          </div>
+          <Button onClick={save} disabled={busy}>
+            <SaveIcon /> Save changes
+          </Button>
         </div>
       </SectionCard>
     </div>
@@ -2113,73 +2001,7 @@ export default function GtaSettingsPage() {
 }
 ```
 
-- [ ] **Step 8: Create GTA danger page**
-
-Create `src/app/(panel)/gta/[id]/danger/page.tsx`:
-
-```tsx
-"use client";
-
-import { useParams, useRouter } from "next/navigation";
-import { useSWRConfig } from "swr";
-import { toast } from "sonner";
-import { Trash2Icon, TriangleAlertIcon } from "lucide-react";
-import { api } from "@/lib/api";
-import { useInstance } from "@/hooks/use-instances";
-import { PageHeader } from "@/components/panel/page-header";
-import { useConfirm } from "@/components/panel/confirm-dialog";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-
-export default function GtaDangerPage() {
-  const { id } = useParams<{ id: string }>();
-  const { data: instance } = useInstance(id);
-  const { confirm, node } = useConfirm();
-  const router = useRouter();
-  const { mutate } = useSWRConfig();
-
-  if (!instance) return <Skeleton className="h-64 rounded-xl" />;
-
-  async function deleteServer() {
-    await api.instances.remove(id);
-    await mutate((key) => Array.isArray(key) && key[0] === "instances");
-    toast.success(`Server "${instance?.name}" deleted`);
-    router.push("/gta");
-  }
-
-  return (
-    <div className="flex flex-col gap-5">
-      {node}
-      <PageHeader title="Danger Zone" description="Irreversible GTA server actions." icon={TriangleAlertIcon} />
-      <div className="rounded-xl border border-destructive/30 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-heading text-sm font-semibold">Delete server</h2>
-            <p className="text-sm text-muted-foreground">Deletes this FXServer instance and its local server-data directory.</p>
-          </div>
-          <Button
-            variant="destructive"
-            onClick={() =>
-              confirm({
-                title: `Delete ${instance.name}?`,
-                description: "This deletes the GTA server directory from disk.",
-                confirmLabel: "Delete server",
-                confirmPhrase: instance.name,
-                destructive: true,
-                onConfirm: deleteServer,
-              })
-            }
-          >
-            <Trash2Icon /> Delete server
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-```
-
-- [ ] **Step 9: Run typecheck**
+- [ ] **Step 6: Run typecheck**
 
 Run:
 
@@ -2189,11 +2011,11 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add 'src/app/(panel)/gta' src/components/gta src/components/vintage-story/instance-card.tsx
-git commit -m "feat: add owner GTA panel views"
+git add 'src/app/(panel)/gta' src/lib/gta.ts
+git commit -m "feat: add owner GTA 5 dashboard"
 ```
 
 ---
@@ -2290,7 +2112,7 @@ Run from `/opt/slutvival`:
 
 ```bash
 if ! rg -q '^games/\*\*/server-data/$' .gitignore; then
-  printf '\n# GTA / FiveM runtime data\ngames/**/server-data/\n' >> .gitignore
+  printf '\n# GTA 5 / FiveM runtime data\ngames/**/server-data/\n' >> .gitignore
 fi
 git check-ignore games/gta/los-santos/server-data/server.secret.cfg
 git add .gitignore
@@ -2299,18 +2121,18 @@ git commit -m "chore: ignore GTA server data"
 
 Expected: `git check-ignore` prints `games/gta/los-santos/server-data/server.secret.cfg`, and the outer repo commit contains only `.gitignore`.
 
-- [ ] **Step 9: Create a GTA instance from the panel or API**
+- [ ] **Step 9: Open the GTA 5 dashboard**
 
-Use the owner UI or run an authenticated API request from the browser session. If using API is inconvenient, use the panel UI at `/gta`.
+Use the owner UI sidebar item for GTA 5 or open `/gta` directly. The route ensures the singleton instance and redirects to `/gta/los-santos`.
 
-Expected local files after create:
+Expected local files after opening the dashboard:
 
 ```text
-/opt/slutvival/games/gta/<server-id>/server.yml
-/opt/slutvival/games/gta/<server-id>/docker-compose.yml
-/opt/slutvival/games/gta/<server-id>/.env
-/opt/slutvival/games/gta/<server-id>/server-data/server.cfg
-/opt/slutvival/games/gta/<server-id>/server-data/server.secret.cfg
+/opt/slutvival/games/gta/los-santos/server.yml
+/opt/slutvival/games/gta/los-santos/docker-compose.yml
+/opt/slutvival/games/gta/los-santos/.env
+/opt/slutvival/games/gta/los-santos/server-data/server.cfg
+/opt/slutvival/games/gta/los-santos/server-data/server.secret.cfg
 ```
 
 - [ ] **Step 10: Check generated compose**
@@ -2318,7 +2140,7 @@ Expected local files after create:
 Run:
 
 ```bash
-docker compose -f /opt/slutvival/games/gta/<server-id>/docker-compose.yml config
+docker compose -f /opt/slutvival/games/gta/los-santos/docker-compose.yml config
 ```
 
 Expected: config renders; `30120` TCP/UDP is published; `40120` is absent.
@@ -2334,7 +2156,7 @@ Expected: start fails with `GTA setup incomplete: missing Cfx.re sv_licenseKey`,
 Edit:
 
 ```text
-/opt/slutvival/games/gta/<server-id>/server-data/server.secret.cfg
+/opt/slutvival/games/gta/los-santos/server-data/server.secret.cfg
 ```
 
 Set:
