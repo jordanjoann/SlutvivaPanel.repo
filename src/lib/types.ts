@@ -50,7 +50,7 @@ export type ServerStatus =
 
 /** How a given instance is actually launched / supervised. */
 export type RuntimeKind = "docker" | "process" | "simulated";
-export type ServerEngine = "stratum" | "vanilla";
+export type ServerEngine = "stratum" | "vanilla" | "fxserver";
 
 export interface InstanceResources {
   /** Hard memory limit handed to the container / process, in MB. */
