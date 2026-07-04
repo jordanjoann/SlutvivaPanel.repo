@@ -19,13 +19,19 @@ export async function PUT(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as {
     username?: string;
+    email?: string;
     pin?: string;
   };
   const username = body.username?.trim() ?? "";
+  const email = body.email?.trim() ?? "";
   const pin = body.pin?.trim();
 
   if (!username) {
     return Response.json({ error: "Username is required." }, { status: 400 });
+  }
+
+  if (!email) {
+    return Response.json({ error: "Email is required." }, { status: 400 });
   }
 
   if (pin) {
@@ -35,7 +41,9 @@ export async function PUT(req: Request) {
 
   try {
     const account = await updateAccount({
+      userId: session.account.id,
       username,
+      email,
       pin: pin || undefined,
     });
     return Response.json({ ok: true, account });

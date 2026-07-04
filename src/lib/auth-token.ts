@@ -1,22 +1,30 @@
+import type { PanelRole } from "@/lib/server/panel-users";
+
 export const SESSION_COOKIE = "slutvival_session";
 export const SESSION_MAX_AGE_SECONDS = 72 * 60 * 60;
 
-type SessionPayload = {
-  sub: "local";
+export type SessionPayload = {
+  sub: string;
+  role: PanelRole;
   exp: number;
   iat: number;
-  v: 1;
+  v: 2;
 };
 
-const FALLBACK_SECRET = "slutvival-panel-local-auth-v1";
+const FALLBACK_SECRET = "slutvival-panel-local-auth-v2";
 
-export async function createSessionToken(now = Date.now()): Promise<string> {
+export async function createSessionToken(
+  userId: string,
+  role: PanelRole,
+  now = Date.now(),
+): Promise<string> {
   const issuedAt = Math.floor(now / 1000);
   const payload: SessionPayload = {
-    sub: "local",
+    sub: userId,
+    role,
     iat: issuedAt,
     exp: issuedAt + SESSION_MAX_AGE_SECONDS,
-    v: 1,
+    v: 2,
   };
   const encoded = base64UrlEncodeText(JSON.stringify(payload));
   return `${encoded}.${await sign(encoded)}`;
@@ -36,7 +44,13 @@ export async function verifySessionToken(
 
   try {
     const payload = JSON.parse(base64UrlDecodeText(encoded)) as Partial<SessionPayload>;
-    if (payload.sub !== "local" || payload.v !== 1 || typeof payload.exp !== "number") {
+    if (
+      typeof payload.sub !== "string" ||
+      !payload.sub ||
+      !isSessionRole(payload.role) ||
+      payload.v !== 2 ||
+      typeof payload.exp !== "number"
+    ) {
       return null;
     }
     if (payload.exp * 1000 <= now) return null;
@@ -44,6 +58,10 @@ export async function verifySessionToken(
   } catch {
     return null;
   }
+}
+
+function isSessionRole(value: unknown): value is PanelRole {
+  return value === "owner" || value === "admin" || value === "moderator" || value === "viewer";
 }
 
 async function sign(value: string): Promise<string> {
