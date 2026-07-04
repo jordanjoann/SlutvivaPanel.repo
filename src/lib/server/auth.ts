@@ -15,17 +15,22 @@ export type SessionAccount = {
   expiresAt: number;
 };
 
-const store = new PanelUserStore();
+let store: PanelUserStore | null = null;
+
+function getStore(): PanelUserStore {
+  store ??= new PanelUserStore();
+  return store;
+}
 
 export async function getAccount(): Promise<PanelAccount> {
-  const users = await store.listUsers();
+  const users = await getStore().listUsers();
   const owner = users.find((user) => user.role === "owner");
   if (!owner) throw new Error("Owner account is not configured.");
   return owner;
 }
 
 export async function listPanelUsers(): Promise<PanelUser[]> {
-  return store.listUsers();
+  return getStore().listUsers();
 }
 
 export async function createPanelUser(input: {
@@ -34,19 +39,19 @@ export async function createPanelUser(input: {
   role: PanelRole;
   pin: string;
 }): Promise<PanelUser> {
-  return store.createUser(input);
+  return getStore().createUser(input);
 }
 
 export async function updatePanelUserRole(id: string, role: PanelRole): Promise<PanelUser> {
-  return store.updateRole(id, role);
+  return getStore().updateRole(id, role);
 }
 
 export async function rollbackCreatedPanelUser(id: string): Promise<void> {
-  store.rollbackCreatedUser(id);
+  getStore().rollbackCreatedUser(id);
 }
 
 export async function authenticate(username: string, pin: string): Promise<PanelAccount | null> {
-  return store.authenticate(username, pin);
+  return getStore().authenticate(username, pin);
 }
 
 export async function updateAccount(input: {
@@ -55,7 +60,7 @@ export async function updateAccount(input: {
   email: string;
   pin?: string;
 }): Promise<PanelAccount> {
-  return store.updateOwnAccount(input.userId, {
+  return getStore().updateOwnAccount(input.userId, {
     username: input.username,
     email: input.email,
     pin: input.pin,
@@ -63,11 +68,11 @@ export async function updateAccount(input: {
 }
 
 export async function createPinReset(identifier: string) {
-  return store.createPinReset(identifier);
+  return getStore().createPinReset(identifier);
 }
 
 export async function resetPinWithToken(token: string, pin: string) {
-  return store.resetPinWithToken(token, pin);
+  return getStore().resetPinWithToken(token, pin);
 }
 
 export async function getSessionAccount(): Promise<SessionAccount | null> {
@@ -75,7 +80,7 @@ export async function getSessionAccount(): Promise<SessionAccount | null> {
   const payload = await verifySessionToken(cookieStore.get(SESSION_COOKIE)?.value);
   if (!payload) return null;
 
-  const account = await store.getUserById(payload.sub);
+  const account = await getStore().getUserById(payload.sub);
   if (!account) return null;
 
   return {
