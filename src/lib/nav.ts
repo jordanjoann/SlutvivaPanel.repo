@@ -49,7 +49,7 @@ export const NAV: NavGroup[] = [
     label: "Platform",
     items: [
       { label: "Discord", href: "/discord", icon: MessagesSquare, available: true },
-      { label: "Users & Roles", href: "/users", icon: Users, badge: "Soon" },
+      { label: "Users & Roles", href: "/users", icon: Users, available: true },
       { label: "Settings", href: "/settings", icon: Settings, available: true },
     ],
   },
