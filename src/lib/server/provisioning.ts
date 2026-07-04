@@ -8,6 +8,7 @@ import {
   config,
   instanceDataPath,
   instanceDir,
+  instanceDirForGame,
   instanceServerPath,
 } from "./config";
 import { ensureStratumArtifact } from "./vintage-network/artifacts";
@@ -39,9 +40,10 @@ export function serverInstallMarkerValue(inst: Instance): string {
 }
 
 export async function ensureInstanceDockerFiles(inst: Instance): Promise<void> {
-  await fs.mkdir(instanceDir(inst.id), { recursive: true });
+  const instanceDirPath = instanceDirForGame(inst.game, inst.id);
+  await fs.mkdir(instanceDirPath, { recursive: true });
   await fs.writeFile(
-    path.join(instanceDir(inst.id), ".env"),
+    path.join(instanceDirPath, ".env"),
     [
       `SERVER_ID=${inst.id}`,
       `SERVER_NAME=${quoteEnv(inst.name)}`,
@@ -55,7 +57,7 @@ export async function ensureInstanceDockerFiles(inst: Instance): Promise<void> {
     "utf8",
   );
   await fs.writeFile(
-    path.join(instanceDir(inst.id), "docker-compose.yml"),
+    path.join(instanceDirPath, "docker-compose.yml"),
     dockerCompose(inst),
     "utf8",
   );

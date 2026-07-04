@@ -46,6 +46,8 @@ describe("game-aware instance store", () => {
 
     await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "server.yml"))).resolves.toBeTruthy();
     await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "server-data"))).resolves.toBeTruthy();
+    await expect(fs.stat(path.join(root, "games", "gta", "los-santos", ".env"))).resolves.toBeTruthy();
+    await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "docker-compose.yml"))).resolves.toBeTruthy();
 
     expect(await listInstances("gta")).toHaveLength(1);
     expect(await listInstances("vintage-story")).toHaveLength(0);
