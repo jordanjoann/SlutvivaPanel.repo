@@ -1,15 +1,34 @@
 import type { CreateInstanceInput, GameId } from "@/lib/types";
+import { canAccessInstanceGame, canUseInstanceMethod } from "@/lib/access-policy";
+import { getSessionAccount } from "@/lib/server/auth";
 import { listInstances, createInstance } from "@/lib/server/store";
-import { json, badRequest, serverError, toInstanceWithState } from "@/lib/server/http";
+import {
+  json,
+  badRequest,
+  forbidden,
+  serverError,
+  toInstanceWithState,
+  unauthorized,
+} from "@/lib/server/http";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
+    const session = await getSessionAccount();
+    if (!session) return unauthorized();
+    if (!canUseInstanceMethod(session.account.role, req.method)) return forbidden();
+
     const game = new URL(req.url).searchParams.get("game") as GameId | null;
-    const instances = await listInstances(game ?? undefined);
-    const withState = await Promise.all(instances.map(toInstanceWithState));
+    if (game && !canAccessInstanceGame(session.account.role, game)) return forbidden();
+
+    const scopedGame = session.account.role === "owner" ? game : "vintage-story";
+    const instances = await listInstances(scopedGame ?? undefined);
+    const visibleInstances = instances.filter((instance) =>
+      canAccessInstanceGame(session.account.role, instance.game),
+    );
+    const withState = await Promise.all(visibleInstances.map(toInstanceWithState));
     return json(withState);
   } catch (e) {
     return serverError(e);
@@ -18,6 +37,10 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const session = await getSessionAccount();
+    if (!session) return unauthorized();
+    if (!canUseInstanceMethod(session.account.role, req.method)) return forbidden();
+
     const body = (await req.json()) as { name?: string; [k: string]: unknown };
     if (!body.name || typeof body.name !== "string") {
       return badRequest("A server name is required");

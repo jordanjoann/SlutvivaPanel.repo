@@ -1,38 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth-token";
+import { canAccessApiPath, canAccessPagePath } from "@/lib/access-policy";
 
 const PUBLIC_PATHS = new Set(["/login", "/reset-pin"]);
-const NON_OWNER_PAGE_PATHS = new Set(["/", "/account"]);
-const AUTH_API_PATHS = new Set([
-  "/api/auth/login",
-  "/api/auth/logout",
-  "/api/auth/session",
-  "/api/auth/account",
-  "/api/auth/recovery/request",
-  "/api/auth/recovery/reset",
-]);
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (isPublicAsset(pathname)) return NextResponse.next();
 
   const session = await verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value);
-  const isAuthApi = AUTH_API_PATHS.has(pathname);
 
   if (session && pathname === "/login") {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  if (session && session.role !== "owner") {
-    if (pathname.startsWith("/api/") && !AUTH_API_PATHS.has(pathname)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (session) {
+    if (pathname.startsWith("/api/")) {
+      if (!canAccessApiPath(session.role, pathname)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      return NextResponse.next();
     }
-    if (!pathname.startsWith("/api/") && !PUBLIC_PATHS.has(pathname) && !NON_OWNER_PAGE_PATHS.has(pathname)) {
-      return NextResponse.redirect(new URL("/", req.url));
+
+    if (!canAccessPagePath(session.role, pathname)) {
+      const destination = session.role === "admin" || session.role === "moderator" ? "/vintage-story" : "/";
+      return NextResponse.redirect(new URL(destination, req.url));
     }
+
+    return NextResponse.next();
   }
 
-  if (session || PUBLIC_PATHS.has(pathname) || isAuthApi) {
+  if (PUBLIC_PATHS.has(pathname) || canAccessApiPath("viewer", pathname)) {
     return NextResponse.next();
   }
 

@@ -65,7 +65,7 @@ type LegacyAccount = {
 const DEFAULT_DB_FILE = "/opt/slutvival/data/slutvival-panel.sqlite";
 const HASH_ITERATIONS = 120_000;
 const HASH_LENGTH = 32;
-const PIN_RESET_TTL_MS = 30 * 60 * 1000;
+const PIN_RESET_TTL_MS = 24 * 60 * 60 * 1000;
 const PIN_RESET_COOLDOWN_MS = 5 * 60 * 1000;
 const ROLES: PanelRole[] = ["owner", "admin", "moderator", "viewer"];
 

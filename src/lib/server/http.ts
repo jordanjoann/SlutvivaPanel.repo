@@ -14,6 +14,14 @@ export function badRequest(error: string, detail?: string): Response {
   return Response.json({ error, detail }, { status: 400 });
 }
 
+export function unauthorized(error = "Unauthorized"): Response {
+  return Response.json({ error }, { status: 401 });
+}
+
+export function forbidden(error = "Forbidden"): Response {
+  return Response.json({ error }, { status: 403 });
+}
+
 export function notFound(error = "Not found"): Response {
   return Response.json({ error }, { status: 404 });
 }

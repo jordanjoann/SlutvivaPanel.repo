@@ -11,7 +11,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { visibleNavForRole } from "@/lib/nav";
+import { isVintageManagerRole, visibleNavForRole } from "@/lib/access";
 import { useInstances } from "@/hooks/use-instances";
 import { StatusDot } from "@/components/panel/status-badge";
 import type { PanelRole } from "@/lib/server/panel-users";
@@ -19,7 +19,7 @@ import type { PanelRole } from "@/lib/server/panel-users";
 export function CommandMenu({ role }: { role: PanelRole }) {
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
-  const { data: instances } = useInstances(role === "owner" ? "vintage-story" : null);
+  const { data: instances } = useInstances(isVintageManagerRole(role) ? "vintage-story" : null);
   const visibleNav = visibleNavForRole(role);
 
   React.useEffect(() => {
@@ -55,7 +55,7 @@ export function CommandMenu({ role }: { role: PanelRole }) {
         <CommandInput placeholder="Search servers and pages…" />
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
-          {role === "owner" && instances && instances.length > 0 && (
+          {isVintageManagerRole(role) && instances && instances.length > 0 && (
             <CommandGroup heading="Vintage Story servers">
               {instances.map((inst) => (
                 <CommandItem

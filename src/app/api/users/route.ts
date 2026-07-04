@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     await sendWelcomeEmail(
       {
         to: user.email,
-        loginUrl: `${emailConfig.publicUrl}/login`,
+        loginUrl: emailConfig.publicUrl,
         username: user.username,
         role: user.role,
         pin: body.pin ?? "",

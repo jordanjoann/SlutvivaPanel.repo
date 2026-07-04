@@ -1,6 +1,18 @@
 import type { Instance, PowerAction } from "@/lib/types";
+import {
+  canAccessInstanceGame,
+  canUsePowerAction,
+} from "@/lib/access-policy";
+import { getSessionAccount } from "@/lib/server/auth";
 import { supervisor } from "@/lib/server/supervisor";
-import { json, badRequest, serverError, loadInstance } from "@/lib/server/http";
+import {
+  json,
+  badRequest,
+  forbidden,
+  serverError,
+  loadInstance,
+  unauthorized,
+} from "@/lib/server/http";
 import { publishDiscordNotification } from "@/lib/server/discord";
 
 export const dynamic = "force-dynamic";
@@ -13,13 +25,20 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const session = await getSessionAccount();
+    if (!session) return unauthorized();
+
     const { id } = await params;
     const { action } = (await req.json()) as { action?: PowerAction };
     if (!action || !ACTIONS.includes(action)) {
       return badRequest(`action must be one of: ${ACTIONS.join(", ")}`);
     }
+    if (!canUsePowerAction(session.account.role, action)) return forbidden();
+
     const res = await loadInstance(id);
     if ("response" in res) return res.response;
+    if (!canAccessInstanceGame(session.account.role, res.instance.game)) return forbidden();
+
     await supervisor.power(res.instance, action);
     const state = await supervisor.getState(res.instance);
     await notifyDiscord(res.instance, action);

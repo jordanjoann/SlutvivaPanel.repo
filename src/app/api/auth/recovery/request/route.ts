@@ -31,6 +31,7 @@ export async function POST(req: Request) {
     await sendPinResetEmail(
       {
         to: reset.user.email,
+        username: reset.user.username,
         resetUrl: resetUrl.toString(),
         expiresAt: new Date(reset.expiresAt),
       },

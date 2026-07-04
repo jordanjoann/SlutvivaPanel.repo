@@ -1,6 +1,17 @@
 import * as mods from "@/lib/server/mods";
+import { canAccessInstanceGame, canUseModOperation } from "@/lib/access-policy";
+import { getSessionAccount } from "@/lib/server/auth";
 import type { ModSearchResult } from "@/lib/types";
-import { json, ok, badRequest, notFound, serverError } from "@/lib/server/http";
+import {
+  json,
+  ok,
+  badRequest,
+  forbidden,
+  loadInstance,
+  notFound,
+  serverError,
+  unauthorized,
+} from "@/lib/server/http";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,7 +20,14 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, { params }: Ctx) {
   try {
+    const session = await getSessionAccount();
+    if (!session) return unauthorized();
+
     const { id } = await params;
+    const res = await loadInstance(id);
+    if ("response" in res) return res.response;
+    if (!canAccessInstanceGame(session.account.role, res.instance.game)) return forbidden();
+
     return json({ mods: await mods.listInstalled(id) });
   } catch (e) {
     return serverError(e);
@@ -27,6 +45,15 @@ export async function POST(req: Request, { params }: Ctx) {
       mod?: ModSearchResult;
       fileName?: string;
     };
+    const session = await getSessionAccount();
+    if (!session) return unauthorized();
+    if (!body.op) return badRequest("unknown op");
+    if (!canUseModOperation(session.account.role, body.op)) return forbidden();
+
+    const res = await loadInstance(id);
+    if ("response" in res) return res.response;
+    if (!canAccessInstanceGame(session.account.role, res.instance.game)) return forbidden();
+
     switch (body.op) {
       case "enable":
       case "disable": {

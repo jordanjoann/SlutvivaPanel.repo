@@ -2,6 +2,7 @@
 
 import { MountainIcon, ServerIcon } from "lucide-react";
 import { useInstances } from "@/hooks/use-instances";
+import { useSessionAccount } from "@/hooks/use-session-account";
 import { PageHeader } from "@/components/panel/page-header";
 import { EmptyState } from "@/components/panel/empty-state";
 import { InstanceCard } from "@/components/vintage-story/instance-card";
@@ -10,7 +11,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { InstanceWithState } from "@/lib/types";
 
 export default function VintageStoryPage() {
+  const { role } = useSessionAccount();
   const { data: instances, isLoading } = useInstances("vintage-story");
+  const hasFullAccess = role === "owner";
 
   const groups = groupInstances(instances ?? []);
 
@@ -18,9 +21,13 @@ export default function VintageStoryPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Vintage Story"
-        description="Manage your Vintage Story server instances. Select one to open its management interface."
+        description={
+          hasFullAccess
+            ? "Manage your Vintage Story server instances. Select one to open its management interface."
+            : "Select a Vintage Story server to view players, whitelist, roles, and mods."
+        }
         icon={MountainIcon}
-        actions={<CreateServerDialog />}
+        actions={hasFullAccess ? <CreateServerDialog /> : undefined}
       />
 
       {isLoading && !instances ? (
@@ -32,9 +39,13 @@ export default function VintageStoryPage() {
       ) : instances && instances.length === 0 ? (
         <EmptyState
           icon={ServerIcon}
-          title="No servers yet"
-          description="Create your first Vintage Story instance to get started."
-          action={<CreateServerDialog />}
+          title={hasFullAccess ? "No servers yet" : "No servers available"}
+          description={
+            hasFullAccess
+              ? "Create your first Vintage Story instance to get started."
+              : "No Vintage Story servers are available for your role yet."
+          }
+          action={hasFullAccess ? <CreateServerDialog /> : undefined}
         />
       ) : (
         <div className="flex flex-col gap-8">
@@ -48,7 +59,7 @@ export default function VintageStoryPage() {
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {list.map((inst) => (
-                  <InstanceCard key={inst.id} instance={inst} />
+                  <InstanceCard key={inst.id} instance={inst} hasFullAccess={hasFullAccess} />
                 ))}
               </div>
             </section>

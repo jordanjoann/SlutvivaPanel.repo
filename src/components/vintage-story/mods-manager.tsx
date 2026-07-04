@@ -43,13 +43,14 @@ import type { InstalledMod, ModDependency, ModSearchResult } from "@/lib/types";
 
 type Mode = "installed" | "repository";
 
-export function ModsManager({ id }: { id: string }) {
+export function ModsManager({ id, limited = false }: { id: string; limited?: boolean }) {
   const [mode, setMode] = React.useState<Mode>("installed");
   const [dragging, setDragging] = React.useState(false);
   const { confirm, node: confirmNode } = useConfirm();
 
   const installed = useSWR(["mods", id], () => api.mods.list(id));
   const installedIds = new Set((installed.data?.mods ?? []).map((m) => m.id));
+  const effectiveMode = limited ? "installed" : mode;
 
   async function op(body: Record<string, unknown>, msg?: string) {
     try {
@@ -84,56 +85,62 @@ export function ModsManager({ id }: { id: string }) {
       {confirmNode}
 
       {/* Mode switch */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
-          <button
-            onClick={() => setMode("installed")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              mode === "installed"
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <PackageIcon className="size-4" /> Installed
-            {installed.data && (
-              <span className="rounded bg-background/60 px-1.5 text-[10px]">
-                {installed.data.mods.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setMode("repository")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              mode === "repository"
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <SearchIcon className="size-4" /> Browse Mod Database
-          </button>
+      {!limited && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
+            <button
+              onClick={() => setMode("installed")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                effectiveMode === "installed"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <PackageIcon className="size-4" /> Installed
+              {installed.data && (
+                <span className="rounded bg-background/60 px-1.5 text-[10px]">
+                  {installed.data.mods.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setMode("repository")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                effectiveMode === "repository"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <SearchIcon className="size-4" /> Browse Mod Database
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {mode === "installed" ? (
+      {effectiveMode === "installed" ? (
         <div
           className={cn(
             "relative rounded-xl",
-            dragging && "ring-2 ring-primary",
+            !limited && dragging && "ring-2 ring-primary",
           )}
           onDragOver={(e) => {
+            if (limited) return;
             e.preventDefault();
             setDragging(true);
           }}
-          onDragLeave={() => setDragging(false)}
+          onDragLeave={() => {
+            if (!limited) setDragging(false);
+          }}
           onDrop={(e) => {
+            if (limited) return;
             e.preventDefault();
             setDragging(false);
             if (e.dataTransfer.files.length) handleZipDrop(e.dataTransfer.files);
           }}
         >
-          {dragging && (
+          {!limited && dragging && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-primary/5 text-sm font-medium text-primary">
               <UploadCloudIcon className="mr-2 size-5" /> Drop .zip to install
             </div>
@@ -141,6 +148,7 @@ export function ModsManager({ id }: { id: string }) {
           <InstalledList
             mods={installed.data?.mods}
             loading={installed.isLoading}
+            limited={limited}
             onToggle={(m, enabled) =>
               op({ op: enabled ? "enable" : "disable", modId: m.id }, `${m.name} ${enabled ? "enabled" : "disabled"}`)
             }
@@ -155,9 +163,11 @@ export function ModsManager({ id }: { id: string }) {
               })
             }
           />
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <UploadCloudIcon className="size-3.5" /> Tip: drag a .zip mod archive anywhere here to install it.
-          </p>
+          {!limited && (
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <UploadCloudIcon className="size-3.5" /> Tip: drag a .zip mod archive anywhere here to install it.
+            </p>
+          )}
         </div>
       ) : (
         <Repository id={id} installedIds={installedIds} onInstalled={() => installed.mutate()} />
@@ -173,12 +183,14 @@ export function ModsManager({ id }: { id: string }) {
 function InstalledList({
   mods,
   loading,
+  limited,
   onToggle,
   onUpdate,
   onDelete,
 }: {
   mods?: InstalledMod[];
   loading: boolean;
+  limited: boolean;
   onToggle: (m: InstalledMod, enabled: boolean) => void;
   onUpdate: (m: InstalledMod) => void;
   onDelete: (m: InstalledMod) => void;
@@ -219,7 +231,11 @@ function InstalledList({
       <EmptyState
         icon={PackageIcon}
         title="No mods installed"
-        description="Browse the Mod Database or drag a .zip archive here to install mods."
+        description={
+          limited
+            ? "Installed mods will appear here."
+            : "Browse the Mod Database or drag a .zip archive here to install mods."
+        }
       />
     );
   }
@@ -258,11 +274,13 @@ function InstalledList({
                       {m.author ? `by ${m.author}` : m.id}
                     </p>
                   </div>
-                  <Switch
-                    checked={m.enabled}
-                    onCheckedChange={(v) => onToggle(m, v)}
-                    aria-label="Enabled"
-                  />
+                  {!limited && (
+                    <Switch
+                      checked={m.enabled}
+                      onCheckedChange={(v) => onToggle(m, v)}
+                      aria-label="Enabled"
+                    />
+                  )}
                 </div>
                 <p className="line-clamp-2 text-xs text-muted-foreground">
                   {m.description || "No description available."}
@@ -285,9 +303,11 @@ function InstalledList({
                       Up to date
                     </Button>
                   )}
-                  <Button size="sm" variant="destructive" className="ml-auto" onClick={() => onDelete(m)}>
-                    <Trash2Icon /> Delete
-                  </Button>
+                  {!limited && (
+                    <Button size="sm" variant="destructive" className="ml-auto" onClick={() => onDelete(m)}>
+                      <Trash2Icon /> Delete
+                    </Button>
+                  )}
                 </div>
               </div>
             );

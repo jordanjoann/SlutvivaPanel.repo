@@ -35,29 +35,36 @@ describe("readEmailConfig", () => {
 });
 
 describe("email builders", () => {
-  it("builds welcome email with username, role, and starting PIN", () => {
+  it("builds a concise welcome email with username and starting PIN", () => {
     const email = buildWelcomeEmail({
-      loginUrl: "https://panel.slutvival.com/login",
+      loginUrl: "https://panel.slutvival.com",
       username: "Viewer",
       role: "viewer",
       pin: "1234",
     });
 
-    expect(email.subject).toBe("Your Slutvival Panel login");
-    expect(email.text).toContain("Viewer");
-    expect(email.text).toContain("viewer");
-    expect(email.text).toContain("1234");
-    expect(email.html).toContain("https://panel.slutvival.com/login");
+    expect(email.subject).toBe("Welcome to Slutvival");
+    expect(email.text).toContain("Welcome to the Slutvival team!");
+    expect(email.text).toContain("Visit https://panel.slutvival.com to gain access to your account.");
+    expect(email.text).toContain("Username: Viewer");
+    expect(email.text).toContain("PIN: 1234");
+    expect(email.text).not.toContain("Role:");
+    expect(email.html).toContain("Welcome to the Slutvival team!");
+    expect(email.html).toContain("https://panel.slutvival.com");
   });
 
-  it("builds reset email with reset URL", () => {
+  it("builds a concise reset email with username and reset URL", () => {
     const email = buildPinResetEmail({
+      username: "Viewer",
       resetUrl: "https://panel.slutvival.com/reset-pin?token=abc",
       expiresAt: new Date("2026-07-04T12:30:00.000Z"),
     });
 
-    expect(email.subject).toBe("Reset your Slutvival Panel PIN");
+    expect(email.subject).toBe("Reset your Slutvival PIN");
+    expect(email.text).toContain("Hey Viewer!");
+    expect(email.text).toContain("You seem to have forgotten your PIN. Click the link below to set a new one.");
     expect(email.text).toContain("https://panel.slutvival.com/reset-pin?token=abc");
+    expect(email.text).toContain("This link expires in 24 hours and can only be used once.");
     expect(email.html).toContain("https://panel.slutvival.com/reset-pin?token=abc");
   });
 });
@@ -68,7 +75,7 @@ describe("send helpers", () => {
     await sendWelcomeEmail(
       {
         to: "viewer@example.com",
-        loginUrl: "https://panel.slutvival.com/login",
+        loginUrl: "https://panel.slutvival.com",
         username: "Viewer",
         role: "viewer",
         pin: "1234",
@@ -85,7 +92,7 @@ describe("send helpers", () => {
       expect.objectContaining({
         from: "Slutvival <noreply@mail.slutvival.com>",
         to: "viewer@example.com",
-        subject: "Your Slutvival Panel login",
+        subject: "Welcome to Slutvival",
       }),
     );
   });
@@ -95,6 +102,7 @@ describe("send helpers", () => {
     await sendPinResetEmail(
       {
         to: "viewer@example.com",
+        username: "Viewer",
         resetUrl: "https://panel.slutvival.com/reset-pin?token=abc",
         expiresAt: new Date("2026-07-04T12:30:00.000Z"),
       },
@@ -109,7 +117,7 @@ describe("send helpers", () => {
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "viewer@example.com",
-        subject: "Reset your Slutvival Panel PIN",
+        subject: "Reset your Slutvival PIN",
       }),
     );
   });

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { visibleNavForRole } from "@/lib/access";
 import { cn } from "@/lib/utils";
-import { visibleNavForRole } from "@/lib/nav";
 import type { PanelRole } from "@/lib/server/panel-users";
 
 function isActive(pathname: string, href: string): boolean {

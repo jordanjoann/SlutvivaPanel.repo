@@ -140,6 +140,7 @@ describe("PanelUserStore", () => {
     if (reset.status !== "created") throw new Error("Expected reset token");
     expect(reset.user.email).toBe("viewer@example.com");
     expect(reset.token).toBe("plain-token");
+    expect(reset.expiresAt).toBe(86_401_000);
     expect(await store.resetPinWithToken("plain-token", "5555", 2_000)).toMatchObject({
       id: user.id,
     });

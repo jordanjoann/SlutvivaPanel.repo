@@ -4,19 +4,21 @@ import { PlayIcon, SquareIcon, RotateCwIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePower } from "@/hooks/use-power";
 import { isPoweredOn } from "@/lib/status";
-import type { ServerStatus } from "@/lib/types";
+import type { PowerAction, ServerStatus } from "@/lib/types";
 
 export function PowerControls({
   id,
   status,
   size = "default",
   showRestart = true,
+  allowedActions,
   className,
 }: {
   id: string;
   status: ServerStatus;
   size?: "sm" | "default";
   showRestart?: boolean;
+  allowedActions?: PowerAction[];
   className?: string;
 }) {
   const { busy, run } = usePower(id);
@@ -24,10 +26,14 @@ export function PowerControls({
   const transitioning =
     status === "starting" || status === "stopping" || status === "restarting";
   const disabled = busy !== null || transitioning;
+  const canStart = !allowedActions || allowedActions.includes("start");
+  const canStop = !allowedActions || allowedActions.includes("stop");
+  const canRestart = !allowedActions || allowedActions.includes("restart");
 
   return (
     <div className={className ? className : "flex items-center gap-2"}>
       {on ? (
+        canStop && (
         <Button
           variant="outline"
           size={size}
@@ -41,7 +47,9 @@ export function PowerControls({
           )}
           Stop
         </Button>
+        )
       ) : (
+        canStart && (
         <Button size={size} disabled={disabled} onClick={() => run("start")}>
           {busy === "start" || status === "starting" ? (
             <Loader2Icon className="animate-spin" />
@@ -50,8 +58,9 @@ export function PowerControls({
           )}
           Start
         </Button>
+        )
       )}
-      {showRestart && (
+      {showRestart && canRestart && (
         <Button
           variant="outline"
           size={size}

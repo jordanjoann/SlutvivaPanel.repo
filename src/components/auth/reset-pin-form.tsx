@@ -56,7 +56,7 @@ export function ResetPinForm({ token }: { token: string }) {
         />
       </div>
       <div className="grid gap-1.5">
-        <Label htmlFor="confirm-new-pin">Confirm PIN</Label>
+        <Label htmlFor="confirm-new-pin">Repeat New PIN</Label>
         <Input
           id="confirm-new-pin"
           type="password"

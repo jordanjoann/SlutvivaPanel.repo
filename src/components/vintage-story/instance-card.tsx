@@ -14,9 +14,17 @@ import { StatusBadge } from "@/components/panel/status-badge";
 import { PowerControls } from "@/components/panel/power-controls";
 import { cn } from "@/lib/utils";
 import { formatMB } from "@/lib/format";
-import type { InstanceWithState } from "@/lib/types";
+import type { InstanceWithState, PowerAction } from "@/lib/types";
 
-export function InstanceCard({ instance }: { instance: InstanceWithState }) {
+const LIMITED_POWER_ACTIONS: PowerAction[] = ["start", "restart"];
+
+export function InstanceCard({
+  instance,
+  hasFullAccess,
+}: {
+  instance: InstanceWithState;
+  hasFullAccess: boolean;
+}) {
   const { state } = instance;
   const running = state.status === "running";
   const memPct = state.stats.memoryPercent;
@@ -70,7 +78,13 @@ export function InstanceCard({ instance }: { instance: InstanceWithState }) {
       </div>
 
       <div className="relative z-10 flex items-center justify-between border-t border-border bg-card/50 px-4 py-3">
-        <PowerControls id={instance.id} status={state.status} size="sm" showRestart={false} />
+        <PowerControls
+          id={instance.id}
+          status={state.status}
+          size="sm"
+          showRestart={!hasFullAccess}
+          allowedActions={hasFullAccess ? undefined : LIMITED_POWER_ACTIONS}
+        />
         <Button
           variant="outline"
           size="sm"

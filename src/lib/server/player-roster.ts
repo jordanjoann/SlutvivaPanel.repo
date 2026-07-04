@@ -10,6 +10,7 @@ type PlayerRecord = {
   isWhitelisted?: boolean;
   playtimeSeconds?: number;
   lastSeen?: number;
+  hasPlayed?: boolean;
 };
 
 type ServerConfig = {
@@ -93,7 +94,10 @@ export async function getPlayerRoster(
       player.uid.toLowerCase(),
     ]),
   );
-  const source = records.length > 0 ? records : fallbackOfflineRecords(defaultRole, roles);
+  const source =
+    records.length > 0
+      ? records.filter((record) => record.hasPlayed)
+      : fallbackOfflineRecords(defaultRole, roles);
   const offline = source
     .filter((record) => {
       const uid = record.uid?.toLowerCase();
@@ -221,6 +225,7 @@ async function readServerPlayerRecords(serverId: string): Promise<PlayerRecord[]
       uid,
       name,
       role: isNonEmptyString(record.RoleCode) ? record.RoleCode : undefined,
+      hasPlayed: true,
       isWhitelisted:
         whitelistKeys.has(uid.toLowerCase()) || whitelistKeys.has(name.toLowerCase())
           ? true
@@ -431,6 +436,7 @@ function mergeRecord(authoritative: PlayerRecord, panel: PlayerRecord): PlayerRe
     isWhitelisted: authoritative.isWhitelisted ?? panel.isWhitelisted,
     playtimeSeconds: panel.playtimeSeconds ?? authoritative.playtimeSeconds,
     lastSeen: authoritative.lastSeen ?? panel.lastSeen,
+    hasPlayed: authoritative.hasPlayed ?? panel.hasPlayed,
   };
 }
 
@@ -442,6 +448,7 @@ function mergePanelRecord(current: PlayerRecord, next: PlayerRecord): PlayerReco
     isWhitelisted: next.isWhitelisted ?? current.isWhitelisted,
     playtimeSeconds: next.playtimeSeconds ?? current.playtimeSeconds,
     lastSeen: next.lastSeen ?? current.lastSeen,
+    hasPlayed: next.hasPlayed ?? current.hasPlayed,
   };
 }
 

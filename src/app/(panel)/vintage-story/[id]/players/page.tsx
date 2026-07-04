@@ -12,6 +12,7 @@ import {
   UsersIcon,
   UserPlusIcon,
 } from "lucide-react";
+import { useSessionAccount } from "@/hooks/use-session-account";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/panel/page-header";
 import { SectionCard } from "@/components/panel/section-card";
@@ -35,6 +36,7 @@ import type { Player } from "@/lib/types";
 
 export default function PlayersPage() {
   const { id } = useParams<{ id: string }>();
+  const { role } = useSessionAccount();
   const [search, setSearch] = React.useState("");
   const [whitelistInput, setWhitelistInput] = React.useState("");
   const [roleInput, setRoleInput] = React.useState("");
@@ -73,6 +75,7 @@ export default function PlayersPage() {
   const defaultRole = data?.defaultRole ?? roles[0] ?? "member";
   const roleOptions = roles;
   const roleTarget = selectedRole && roleOptions.includes(selectedRole) ? selectedRole : roleOptions[0] || "";
+  const hasFullAccess = role === "owner";
   const query = search.trim().toLowerCase();
   const filteredOnline = players.filter((p) => matchesPlayer(p, query));
   const filteredOffline = offlinePlayers.filter((p) => matchesPlayer(p, query));
@@ -149,17 +152,20 @@ export default function PlayersPage() {
                       player={p}
                       online
                       onKick={() => act("kick", p.name, "Kicked")}
-                      onBan={() =>
-                        confirm({
-                          title: `Ban ${p.name}?`,
-                          description:
-                            "The player will be disconnected and blocked from rejoining.",
-                          confirmLabel: "Ban player",
-                          destructive: true,
-                          onConfirm: async () => {
-                            await act("ban", p.name, "Banned");
-                          },
-                        })
+                      onBan={
+                        hasFullAccess
+                          ? () =>
+                              confirm({
+                                title: `Ban ${p.name}?`,
+                                description:
+                                  "The player will be disconnected and blocked from rejoining.",
+                                confirmLabel: "Ban player",
+                                destructive: true,
+                                onConfirm: async () => {
+                                  await act("ban", p.name, "Banned");
+                                },
+                              })
+                          : undefined
                       }
                     />
                   ))}
@@ -184,16 +190,19 @@ export default function PlayersPage() {
                     <PlayerRow
                       key={p.uid}
                       player={p}
-                      onBan={() =>
-                        confirm({
-                          title: `Ban ${p.name}?`,
-                          description: "The player will be blocked from joining this server.",
-                          confirmLabel: "Ban player",
-                          destructive: true,
-                          onConfirm: async () => {
-                            await act("ban", p.name, "Banned");
-                          },
-                        })
+                      onBan={
+                        hasFullAccess
+                          ? () =>
+                              confirm({
+                                title: `Ban ${p.name}?`,
+                                description: "The player will be blocked from joining this server.",
+                                confirmLabel: "Ban player",
+                                destructive: true,
+                                onConfirm: async () => {
+                                  await act("ban", p.name, "Banned");
+                                },
+                              })
+                          : undefined
                       }
                     />
                   ))}
@@ -243,39 +252,43 @@ export default function PlayersPage() {
               icon={ShieldCheckIcon}
               bodyClassName="p-0"
             >
-              <RoleAssignmentForm
-                name={roleInput}
-                role={roleTarget}
-                roles={roleOptions}
-                onNameChange={setRoleInput}
-                onRoleChange={setSelectedRole}
-                onSubmit={assignRole}
-              />
+              {hasFullAccess && (
+                <RoleAssignmentForm
+                  name={roleInput}
+                  role={roleTarget}
+                  roles={roleOptions}
+                  onNameChange={setRoleInput}
+                  onRoleChange={setSelectedRole}
+                  onSubmit={assignRole}
+                />
+              )}
               <ManagedPlayerList
                 empty="No non-default role assignments yet."
                 players={assignedRoles}
                 roleOptions={roleOptions}
-                action={(player) => (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <RoleSelect
-                      value={player.role ?? defaultRole}
-                      roles={roleOptions}
-                      playerName={player.name}
-                      onChange={(nextRole) =>
-                        act("role", player.name, "Updated role for", { role: nextRole })
-                      }
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        act("role", player.name, "Reset role for", { role: defaultRole })
-                      }
-                    >
-                      Default
-                    </Button>
-                  </div>
-                )}
+                action={(player) =>
+                  hasFullAccess ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <RoleSelect
+                        value={player.role ?? defaultRole}
+                        roles={roleOptions}
+                        playerName={player.name}
+                        onChange={(nextRole) =>
+                          act("role", player.name, "Updated role for", { role: nextRole })
+                        }
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          act("role", player.name, "Reset role for", { role: defaultRole })
+                        }
+                      >
+                        Default
+                      </Button>
+                    </div>
+                  ) : null
+                }
               />
             </SectionCard>
           </TabsContent>
@@ -302,7 +315,7 @@ function PlayerRow({
   player: Player;
   online?: boolean;
   onKick?: () => void;
-  onBan: () => void;
+  onBan?: () => void;
 }) {
   const pingColor =
     player.pingMs < 60 ? "text-success" : player.pingMs < 120 ? "text-warning" : "text-destructive";
@@ -345,9 +358,11 @@ function PlayerRow({
             <UserXIcon /> Kick
           </Button>
         )}
-        <Button variant="destructive" size="sm" onClick={onBan}>
-          <BanIcon /> Ban
-        </Button>
+        {onBan && (
+          <Button variant="destructive" size="sm" onClick={onBan}>
+            <BanIcon /> Ban
+          </Button>
+        )}
       </div>
     </div>
   );

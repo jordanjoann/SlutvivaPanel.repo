@@ -159,6 +159,23 @@ describe("player roster", () => {
     });
   });
 
+  it("does not show whitelist-only players as offline before they have joined", async () => {
+    const { getPlayerRoster, updateKnownPlayer } = await setupRoster({
+      playerdata: [],
+      panelPlayers: [],
+    });
+
+    await updateKnownPlayer("hub", "InvitedPlayer", { isWhitelisted: true });
+    const roster = await getPlayerRoster(instance(), []);
+
+    expect(roster.whitelist).toHaveLength(1);
+    expect(roster.whitelist[0]).toMatchObject({
+      name: "InvitedPlayer",
+      isWhitelisted: true,
+    });
+    expect(roster.offline.map((player) => player.name)).not.toContain("InvitedPlayer");
+  });
+
   it("rewrites stale panel identities when a real identity is available", async () => {
     const { getPlayerRoster, updateKnownPlayer } = await setupRoster({
       playerdata: [

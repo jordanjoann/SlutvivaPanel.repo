@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import { useInstance } from "@/hooks/use-instances";
 import { usePower } from "@/hooks/use-power";
-import { SERVER_TABS } from "@/lib/games";
+import { useSessionAccount } from "@/hooks/use-session-account";
+import { serverTabsForRole } from "@/lib/access";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/panel/status-badge";
 import { PowerControls } from "@/components/panel/power-controls";
@@ -27,17 +28,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDuration } from "@/lib/format";
+import type { PowerAction } from "@/lib/types";
 import { toast } from "sonner";
+
+const LIMITED_POWER_ACTIONS: PowerAction[] = ["start", "restart"];
 
 export default function ServerLayout({ children }: { children: React.ReactNode }) {
   const { id } = useParams<{ id: string }>();
   const pathname = usePathname();
+  const { role } = useSessionAccount();
   const { data: instance } = useInstance(id);
   const { run } = usePower(id);
   const { confirm, node } = useConfirm();
 
   const base = `/vintage-story/${id}`;
   const status = instance?.state.status ?? "unknown";
+  const isOwner = role === "owner";
+  const tabs = serverTabsForRole(role);
 
   return (
     <div className="flex flex-col gap-5">
@@ -87,40 +94,46 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
           </div>
 
           <div className="flex items-center gap-2">
-            <PowerControls id={id} status={status} />
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button variant="outline" size="icon" aria-label="More actions" />}
-              >
-                <MoreVerticalIcon />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem
-                  onClick={() => {
-                    navigator.clipboard?.writeText(instance?.dataPath ?? "");
-                    toast.success("Data path copied");
-                  }}
+            <PowerControls
+              id={id}
+              status={status}
+              allowedActions={isOwner ? undefined : LIMITED_POWER_ACTIONS}
+            />
+            {isOwner && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="outline" size="icon" aria-label="More actions" />}
                 >
-                  <CopyIcon /> Copy data path
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() =>
-                    confirm({
-                      title: "Force kill server?",
-                      description:
-                        "This immediately terminates the process without saving. Unsaved world changes may be lost.",
-                      confirmLabel: "Force kill",
-                      destructive: true,
-                      onConfirm: () => run("kill"),
-                    })
-                  }
-                >
-                  <ZapOffIcon /> Force kill
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <MoreVerticalIcon />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      navigator.clipboard?.writeText(instance?.dataPath ?? "");
+                      toast.success("Data path copied");
+                    }}
+                  >
+                    <CopyIcon /> Copy data path
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() =>
+                      confirm({
+                        title: "Force kill server?",
+                        description:
+                          "This immediately terminates the process without saving. Unsaved world changes may be lost.",
+                        confirmLabel: "Force kill",
+                        destructive: true,
+                        onConfirm: () => run("kill"),
+                      })
+                    }
+                  >
+                    <ZapOffIcon /> Force kill
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
       </div>
@@ -128,7 +141,7 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
       {/* Tab navigation */}
       <div className="no-scrollbar -mx-1 overflow-x-auto border-b border-border">
         <nav className="flex min-w-max items-center gap-1 px-1">
-          {SERVER_TABS.map((tab) => {
+          {tabs.map((tab) => {
             const href = tab.segment ? `${base}/${tab.segment}` : base;
             const active = pathname === href;
             const danger = "danger" in tab && tab.danger;

@@ -8,5 +8,9 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const session = await getSessionAccount();
   if (!session) redirect("/login");
-  return session.account.role === "owner" ? <OwnerDashboard /> : <LimitedDashboard />;
+  return session.account.role === "owner" ? (
+    <OwnerDashboard />
+  ) : (
+    <LimitedDashboard role={session.account.role} />
+  );
 }
