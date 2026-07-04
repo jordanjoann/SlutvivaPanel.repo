@@ -113,4 +113,24 @@ describe("role access policy", () => {
       "/vintage-story",
     );
   });
+
+  it("keeps GTA 5 owner-only while showing it as available to owners", () => {
+    expect(canAccessPagePath("owner", "/gta")).toBe(true);
+    expect(canAccessApiPath("owner", "/api/instances")).toBe(true);
+    expect(canAccessInstanceGame("owner", "gta")).toBe(true);
+
+    for (const role of ["admin", "moderator", "viewer"] as const) {
+      expect(canAccessPagePath(role, "/gta")).toBe(false);
+      expect(canAccessInstanceGame(role, "gta")).toBe(false);
+      expect(visibleNavForRole(role).flatMap((group) => group.items.map((item) => item.href))).not.toContain(
+        "/gta",
+      );
+    }
+
+    const ownerGtaItem = visibleNavForRole("owner")
+      .flatMap((group) => group.items)
+      .find((item) => item.href === "/gta");
+    expect(ownerGtaItem).toMatchObject({ available: true });
+    expect(ownerGtaItem?.badge).toBeUndefined();
+  });
 });
