@@ -15,11 +15,11 @@ export default async function AccountPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Account"
-        description="Update your panel username and PIN."
+        description="Update your panel profile and PIN."
         icon={UserIcon}
       />
-      <SectionCard title="Login details" description="Changes apply to this local panel account.">
-        <AccountForm username={session.account.username} />
+      <SectionCard title="Profile" description="Changes apply to your signed-in panel account.">
+        <AccountForm username={session.account.username} email={session.account.email} />
       </SectionCard>
     </div>
   );

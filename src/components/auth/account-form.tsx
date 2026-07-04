@@ -8,9 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function AccountForm({ username: initialUsername }: { username: string }) {
+export function AccountForm({
+  username: initialUsername,
+  email: initialEmail,
+}: {
+  username: string;
+  email: string;
+}) {
   const router = useRouter();
   const [username, setUsername] = useState(initialUsername);
+  const [email, setEmail] = useState(initialEmail);
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,15 +36,16 @@ export function AccountForm({ username: initialUsername }: { username: string })
       const response = await fetch("/api/auth/account", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, pin: pin || undefined }),
+        body: JSON.stringify({ username, email, pin: pin || undefined }),
       });
       const data = (await response.json().catch(() => ({}))) as {
-        account?: { username: string };
+        account?: { username: string; email: string };
         error?: string;
       };
       if (!response.ok) throw new Error(data.error ?? "Account update failed.");
 
       setUsername(data.account?.username ?? username);
+      setEmail(data.account?.email ?? email);
       setPin("");
       setConfirmPin("");
       toast.success("Account updated");
@@ -58,6 +66,16 @@ export function AccountForm({ username: initialUsername }: { username: string })
           autoComplete="username"
           value={username}
           onChange={(event) => setUsername(event.target.value)}
+        />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="account-email">Email</Label>
+        <Input
+          id="account-email"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
         />
       </div>
       <div className="grid gap-1.5">
@@ -82,7 +100,7 @@ export function AccountForm({ username: initialUsername }: { username: string })
           onChange={(event) => setConfirmPin(event.target.value)}
         />
       </div>
-      <Button type="submit" className="w-fit" disabled={busy || !username.trim()}>
+      <Button type="submit" className="w-fit" disabled={busy || !username.trim() || !email.trim()}>
         {busy ? <Loader2Icon className="animate-spin" /> : <SaveIcon />}
         Save changes
       </Button>
