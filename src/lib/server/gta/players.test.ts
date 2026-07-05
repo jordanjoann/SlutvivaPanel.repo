@@ -851,6 +851,67 @@ describe("GTA players", () => {
     expect(rejoinedRoster.players[0].sessions[1].leftAt).toBeUndefined();
   });
 
+  it("repairs open sessions for persisted offline players", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const playerId = "gta_repair_player";
+    const storageDir = path.join(inst.dataPath, "slutvival");
+    await fs.mkdir(storageDir, { recursive: true });
+    await fs.writeFile(
+      path.join(storageDir, "players.json"),
+      `${JSON.stringify(
+        [
+          {
+            id: playerId,
+            name: "Repair Me",
+            online: false,
+            identifiers: [],
+            firstSeenAt: now,
+            lastSeenAt: now + 10_000,
+            lastHeartbeatAt: now,
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(storageDir, "sessions.json"),
+      `${JSON.stringify(
+        [
+          {
+            id: "gta_session_repair",
+            playerId,
+            name: "Repair Me",
+            serverId: 7,
+            joinedAt: now,
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const roster = await listGtaPlayers(inst, now + 11_000);
+    const repairedSession = roster.players[0].sessions[0];
+
+    expect(repairedSession).toMatchObject({
+      leftAt: now + 10_000,
+      durationSeconds: 10,
+      dropReason: "State repaired",
+    });
+    expect(Number.isFinite(repairedSession.durationSeconds)).toBe(true);
+
+    const secondRoster = await listGtaPlayers(inst, now + 12_000);
+    expect(secondRoster.players[0].sessions[0]).toMatchObject({
+      leftAt: now + 10_000,
+      durationSeconds: 10,
+      dropReason: "State repaired",
+    });
+  });
+
   it("ignores late drops after heartbeat timeout closes the session", async () => {
     const inst = instance();
     const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);

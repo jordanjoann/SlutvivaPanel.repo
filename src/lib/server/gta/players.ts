@@ -539,7 +539,26 @@ function closeStaleSessions(store: GtaPlayerStore, now: number): boolean {
   let changed = false;
   for (const player of store.players) {
     if (isOnline(player, now)) continue;
-    if (!player.online || player.lastHeartbeatAt === undefined) continue;
+    if (!player.online) {
+      const leftAt = player.lastSeenAt ?? player.lastHeartbeatAt ?? now;
+      for (const session of store.sessions) {
+        if (
+          !sessionBelongsToPlayer(session, player) ||
+          session.leftAt !== undefined
+        )
+          continue;
+        normalizeSessionPlayerId(session, player);
+        session.leftAt = leftAt;
+        session.durationSeconds = Math.max(
+          0,
+          Math.floor((leftAt - session.joinedAt) / 1000),
+        );
+        session.dropReason = "State repaired";
+        changed = true;
+      }
+      continue;
+    }
+    if (player.lastHeartbeatAt === undefined) continue;
 
     const leftAt = player.lastHeartbeatAt;
     for (const session of store.sessions) {
