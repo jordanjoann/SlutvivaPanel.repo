@@ -51,10 +51,18 @@ const IDENTITY_PRIORITY: GtaIdentifierType[] = [
   "discord",
 ];
 const DURABLE_IDENTIFIER_TYPES = new Set<GtaIdentifierType>(IDENTITY_PRIORITY);
+const storeLocks = new Map<string, Promise<void>>();
 
 export async function listGtaPlayers(
   inst: Instance,
   now = Date.now(),
+): Promise<GtaPlayersPayload> {
+  return withStoreLock(inst, () => listGtaPlayersUnlocked(inst, now));
+}
+
+async function listGtaPlayersUnlocked(
+  inst: Instance,
+  now: number,
 ): Promise<GtaPlayersPayload> {
   const store = await readStore(inst);
   const changed = closeStaleSessions(store, now);
@@ -69,6 +77,16 @@ export async function recordGtaHeartbeat(
   inst: Instance,
   players: GtaBridgePlayer[],
   now = Date.now(),
+): Promise<GtaPlayersPayload> {
+  return withStoreLock(inst, () =>
+    recordGtaHeartbeatUnlocked(inst, players, now),
+  );
+}
+
+async function recordGtaHeartbeatUnlocked(
+  inst: Instance,
+  players: GtaBridgePlayer[],
+  now: number,
 ): Promise<GtaPlayersPayload> {
   const store = await readStore(inst);
   store.bridge.lastHeartbeatAt = now;
@@ -92,6 +110,16 @@ export async function recordGtaPlayerJoin(
   inst: Instance,
   player: GtaBridgePlayer,
   now = Date.now(),
+): Promise<{ player: GtaPlayerSummary }> {
+  return withStoreLock(inst, () =>
+    recordGtaPlayerJoinUnlocked(inst, player, now),
+  );
+}
+
+async function recordGtaPlayerJoinUnlocked(
+  inst: Instance,
+  player: GtaBridgePlayer,
+  now: number,
 ): Promise<{ player: GtaPlayerSummary }> {
   const store = await readStore(inst);
   closeStaleSessions(store, now);
@@ -117,6 +145,16 @@ export async function recordGtaPlayerDrop(
   input: { playerId?: string; serverId?: number; reason?: string },
   now = Date.now(),
 ): Promise<void> {
+  return withStoreLock(inst, () =>
+    recordGtaPlayerDropUnlocked(inst, input, now),
+  );
+}
+
+async function recordGtaPlayerDropUnlocked(
+  inst: Instance,
+  input: { playerId?: string; serverId?: number; reason?: string },
+  now: number,
+): Promise<void> {
   const store = await readStore(inst);
   const player = store.players.find((candidate) =>
     input.playerId
@@ -124,24 +162,33 @@ export async function recordGtaPlayerDrop(
       : input.serverId !== undefined && candidate.serverId === input.serverId,
   );
   if (!player) return;
+  if (!player.online) return;
+  if (input.serverId !== undefined && player.serverId !== input.serverId) {
+    return;
+  }
+
+  const session = store.sessions.find((candidate) => {
+    if (candidate.playerId !== player.id || candidate.leftAt !== undefined) {
+      return false;
+    }
+    if (input.serverId !== undefined)
+      return candidate.serverId === input.serverId;
+    if (player.serverId !== undefined)
+      return candidate.serverId === player.serverId;
+    return true;
+  });
+  if (!session) return;
 
   player.online = false;
   player.lastSeenAt = now;
   delete player.serverId;
   delete player.pingMs;
-
-  for (const session of store.sessions) {
-    if (session.playerId !== player.id || session.leftAt !== undefined)
-      continue;
-    if (input.serverId !== undefined && session.serverId !== input.serverId)
-      continue;
-    session.leftAt = now;
-    session.durationSeconds = Math.max(
-      0,
-      Math.floor((now - session.joinedAt) / 1000),
-    );
-    session.dropReason = input.reason;
-  }
+  session.leftAt = now;
+  session.durationSeconds = Math.max(
+    0,
+    Math.floor((now - session.joinedAt) / 1000),
+  );
+  session.dropReason = input.reason;
 
   await writeJsonFile(playersFile(inst), store.players);
   await writeJsonFile(sessionsFile(inst), store.sessions);
@@ -152,6 +199,17 @@ export async function recordGtaPlayerAction(
   input: GtaPlayerActionInput,
   actor: { id: string; username: string },
   now = Date.now(),
+): Promise<GtaPlayerActionResult> {
+  return withStoreLock(inst, () =>
+    recordGtaPlayerActionUnlocked(inst, input, actor, now),
+  );
+}
+
+async function recordGtaPlayerActionUnlocked(
+  inst: Instance,
+  input: GtaPlayerActionInput,
+  actor: { id: string; username: string },
+  now: number,
 ): Promise<GtaPlayerActionResult> {
   const store = await readStore(inst);
   const player = store.players.find(
@@ -197,6 +255,13 @@ export async function findActiveGtaBan(
   inst: Instance,
   identifiers: GtaPlayerIdentifier[],
 ): Promise<GtaPunishment | null> {
+  return withStoreLock(inst, () => findActiveGtaBanUnlocked(inst, identifiers));
+}
+
+async function findActiveGtaBanUnlocked(
+  inst: Instance,
+  identifiers: GtaPlayerIdentifier[],
+): Promise<GtaPunishment | null> {
   const normalized = durableIdentifierKeys(identifiers);
   if (normalized.length === 0) return null;
 
@@ -233,6 +298,30 @@ export function buildGtaPlayerId(
 
 export function buildGtaKickCommand(serverId: number, reason: string): string {
   return `slutvival_kick ${serverId} ${reason.replace(/[\r\n]+/g, " ").trim()}`;
+}
+
+async function withStoreLock<T>(
+  inst: Instance,
+  work: () => Promise<T>,
+): Promise<T> {
+  const key = storageDir(inst);
+  const previous = storeLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => gate);
+  storeLocks.set(key, queued);
+
+  await previous.catch(() => undefined);
+  try {
+    return await work();
+  } finally {
+    release();
+    if (storeLocks.get(key) === queued) {
+      storeLocks.delete(key);
+    }
+  }
 }
 
 async function readStore(inst: Instance): Promise<GtaPlayerStore> {
@@ -564,7 +653,7 @@ async function writeJsonFile(file: string, value: unknown): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = path.join(
     path.dirname(file),
-    `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`,
+    `.${path.basename(file)}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`,
   );
   await fs.writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   await fs.rename(tmp, file);

@@ -309,6 +309,37 @@ describe("GTA players", () => {
     });
   });
 
+  it("preserves concurrent joins for different durable players", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const first = bridgePlayer({
+      serverId: 7,
+      name: "First Join",
+      identifiers: [{ type: "license", value: "license:first" }],
+    });
+    const second = bridgePlayer({
+      serverId: 8,
+      name: "Second Join",
+      identifiers: [{ type: "license", value: "license:second" }],
+    });
+
+    await Promise.all([
+      recordGtaPlayerJoin(inst, first, now),
+      recordGtaPlayerJoin(inst, second, now + 1),
+    ]);
+
+    const roster = await listGtaPlayers(inst, now + 2);
+
+    expect(roster.players.map((player) => player.name).sort()).toEqual([
+      "First Join",
+      "Second Join",
+    ]);
+    expect(roster.players).toHaveLength(2);
+    expect(roster.players.every((player) => player.sessions.length === 1)).toBe(
+      true,
+    );
+  });
+
   it("records a closed session when a player drops", async () => {
     const inst = instance();
     const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
@@ -334,6 +365,45 @@ describe("GTA players", () => {
       durationSeconds: 180,
       dropReason: "Timed out",
     });
+  });
+
+  it("ignores stale drops for an old server id after the player rejoins", async () => {
+    const inst = instance();
+    const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const rejoinedAt = joinedAt + 2_000;
+    const initial = bridgePlayer({ serverId: 7 });
+    const rejoined = bridgePlayer({ serverId: 12 });
+
+    const joined = await recordGtaPlayerJoin(inst, initial, joinedAt);
+    await recordGtaPlayerDrop(
+      inst,
+      { playerId: joined.player.id, serverId: 7, reason: "Quit" },
+      joinedAt + 1_000,
+    );
+    await recordGtaPlayerJoin(inst, rejoined, rejoinedAt);
+    await recordGtaPlayerDrop(
+      inst,
+      { playerId: joined.player.id, serverId: 7, reason: "Late duplicate" },
+      rejoinedAt + 1_000,
+    );
+
+    const roster = await listGtaPlayers(inst, rejoinedAt + 2_000);
+
+    expect(roster.players[0]).toMatchObject({
+      online: true,
+      serverId: 12,
+    });
+    expect(roster.players[0].sessions).toHaveLength(2);
+    expect(roster.players[0].sessions[0]).toMatchObject({
+      serverId: 7,
+      leftAt: joinedAt + 1_000,
+      dropReason: "Quit",
+    });
+    expect(roster.players[0].sessions[1]).toMatchObject({
+      serverId: 12,
+      joinedAt: rejoinedAt,
+    });
+    expect(roster.players[0].sessions[1].leftAt).toBeUndefined();
   });
 
   it("closes stale heartbeat sessions before counting offline time", async () => {
