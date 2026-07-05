@@ -280,6 +280,90 @@ export interface Player {
   lastSeen: number;
 }
 
+export type GtaIdentifierType =
+  "license" | "license2" | "discord" | "steam" | "fivem" | "ip" | "unknown";
+
+export interface GtaPlayerIdentifier {
+  type: GtaIdentifierType;
+  value: string;
+}
+
+export interface GtaBridgePlayer {
+  serverId: number;
+  name: string;
+  pingMs: number;
+  identifiers: GtaPlayerIdentifier[];
+}
+
+export interface GtaPlayerSession {
+  id: string;
+  playerId: string;
+  name: string;
+  serverId?: number;
+  joinedAt: number;
+  leftAt?: number;
+  durationSeconds?: number;
+  dropReason?: string;
+}
+
+export type GtaPunishmentType = "kick" | "warn" | "ban";
+
+export interface GtaPunishment {
+  id: string;
+  playerId: string;
+  playerName: string;
+  type: GtaPunishmentType;
+  reason: string;
+  active: boolean;
+  createdAt: number;
+  revokedAt?: number;
+  actor?: {
+    id: string;
+    username: string;
+  };
+}
+
+export interface GtaPlayerSummary {
+  id: string;
+  name: string;
+  online: boolean;
+  serverId?: number;
+  pingMs?: number;
+  identifiers: GtaPlayerIdentifier[];
+  firstSeenAt: number;
+  lastSeenAt: number;
+  totalPlaytimeSeconds: number;
+  sessions: GtaPlayerSession[];
+  punishments: GtaPunishment[];
+}
+
+export interface GtaPlayersPayload {
+  players: GtaPlayerSummary[];
+  onlineCount: number;
+  offlineCount: number;
+  punishmentCount: number;
+  bridge: {
+    lastHeartbeatAt?: number;
+    online: boolean;
+  };
+}
+
+export interface GtaPlayerActionInput {
+  action: GtaPunishmentType;
+  playerId: string;
+  reason?: string;
+}
+
+export interface GtaPlayerActionResult {
+  ok: true;
+  punishment: GtaPunishment;
+  liveCommand?: string;
+  liveAction?: {
+    ok: boolean;
+    error?: string;
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Console                                                            */
 /* ------------------------------------------------------------------ */
