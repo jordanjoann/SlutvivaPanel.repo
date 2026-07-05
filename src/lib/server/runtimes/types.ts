@@ -25,11 +25,15 @@ export interface Runtime {
   restart(): Promise<void>;
   kill(): Promise<void>;
 
-  sendCommand(command: string): Promise<void>;
+  sendCommand(command: string): Promise<CommandDeliveryResult>;
 
   getStats(): ServerStats;
   getPlayers(): Player[];
 }
+
+export type CommandDeliveryResult =
+  | { ok: true }
+  | { ok: false; error: string };
 
 export type RuntimeContext = {
   instance: Instance;

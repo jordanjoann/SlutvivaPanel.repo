@@ -44,6 +44,7 @@ describe("GTA players action route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getInstance.mockResolvedValue(gtaInstance());
+    command.mockResolvedValue({ ok: true });
     recordGtaPlayerAction.mockResolvedValue({
       ok: true,
       punishment: { id: "punishment_1", type: "warn" },
@@ -127,5 +128,58 @@ describe("GTA players action route", () => {
       ...result,
       liveAction: { ok: false, error: "container offline" },
     });
+  });
+
+  it("reports resolved liveCommand delivery failures as liveAction failure", async () => {
+    const inst = gtaInstance();
+    const result = {
+      ok: true,
+      punishment: { id: "punishment_1", type: "kick" },
+      liveCommand: "slutvival_kick 7 Kicked",
+    };
+    getSessionAccount.mockResolvedValue({
+      account: { id: "u_owner", username: "Owner", role: "owner" },
+    });
+    getInstance.mockResolvedValue(inst);
+    recordGtaPlayerAction.mockResolvedValue(result);
+    command.mockResolvedValue({ ok: false, error: "stdin unavailable" });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      actionRequest({
+        action: "kick",
+        playerId: "gta_player",
+      }),
+      params(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(command).toHaveBeenCalledWith(inst, result.liveCommand);
+    await expect(response.json()).resolves.toEqual({
+      ...result,
+      liveAction: { ok: false, error: "stdin unavailable" },
+    });
+  });
+
+  it("returns 404 when the GTA player id is unknown", async () => {
+    getSessionAccount.mockResolvedValue({
+      account: { id: "u_owner", username: "Owner", role: "owner" },
+    });
+    recordGtaPlayerAction.mockRejectedValue(
+      new Error("GTA player was not found"),
+    );
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      actionRequest({
+        action: "warn",
+        playerId: "gta_missing",
+        reason: "Mind the rules",
+      }),
+      params(),
+    );
+
+    expect(response.status).toBe(404);
+    expect(command).not.toHaveBeenCalled();
   });
 });

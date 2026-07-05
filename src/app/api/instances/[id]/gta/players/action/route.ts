@@ -5,6 +5,7 @@ import {
   forbidden,
   json,
   loadInstance,
+  notFound,
   serverError,
   unauthorized,
 } from "@/lib/server/http";
@@ -45,8 +46,11 @@ export async function POST(req: Request, { params }: Ctx) {
       if (!result.liveCommand) return json(result);
 
       try {
-        await supervisor.command(res.instance, result.liveCommand);
-        return json({ ...result, liveAction: { ok: true } });
+        const liveAction = await supervisor.command(
+          res.instance,
+          result.liveCommand,
+        );
+        return json({ ...result, liveAction });
       } catch (error) {
         return json({
           ...result,
@@ -54,6 +58,9 @@ export async function POST(req: Request, { params }: Ctx) {
         });
       }
     } catch (error) {
+      if (isUnknownGtaPlayerError(error)) {
+        return notFound(errorMessage(error));
+      }
       if (isActionValidationError(error)) {
         return badRequest(errorMessage(error));
       }
@@ -95,10 +102,13 @@ function isActionValidationError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return (
     error.message === "Invalid action" ||
-    error.message === "GTA player was not found" ||
     error.message.endsWith("reason is required") ||
     error.message === "Kick requires an online player with a server id"
   );
+}
+
+function isUnknownGtaPlayerError(error: unknown): boolean {
+  return error instanceof Error && error.message === "GTA player was not found";
 }
 
 function errorMessage(error: unknown): string {

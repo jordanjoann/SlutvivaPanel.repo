@@ -7,7 +7,7 @@ import type {
 } from "@/lib/types";
 import { config } from "./config";
 import { singleton } from "./singleton";
-import type { Runtime } from "./runtimes/types";
+import type { CommandDeliveryResult, Runtime } from "./runtimes/types";
 import { SimulatedRuntime } from "./runtimes/simulated";
 import { ProcessRuntime } from "./runtimes/process";
 import { DockerRuntime, dockerAvailable } from "./runtimes/docker";
@@ -91,7 +91,7 @@ class Supervisor {
     }
   }
 
-  async command(inst: Instance, cmd: string): Promise<void> {
+  async command(inst: Instance, cmd: string): Promise<CommandDeliveryResult> {
     const rt = await this.ensureRuntime(inst);
     return rt.sendCommand(cmd);
   }

@@ -4,7 +4,7 @@ import type { Instance, Player, ServerStats, ServerStatus } from "@/lib/types";
 import { config } from "../config";
 import { consoleBus } from "../console-bus";
 import { normalizeConsoleCommand } from "../commands";
-import type { Runtime } from "./types";
+import type { CommandDeliveryResult, Runtime } from "./types";
 import {
   backendPortBindings,
   normalizeDockerRuntimeStats,
@@ -189,9 +189,9 @@ export class DockerRuntime implements Runtime {
     this.stats = normalizeDockerRuntimeStats(this.status, this.stats);
   }
 
-  async sendCommand(command: string) {
+  async sendCommand(command: string): Promise<CommandDeliveryResult> {
     const normalized = normalizeConsoleCommand(command);
-    if (!normalized) return;
+    if (!normalized) return { ok: false, error: "command is required" };
     consoleBus.push(this.instance.id, normalized, "command");
     try {
       if (!this.stdin) {
@@ -204,7 +204,8 @@ export class DockerRuntime implements Runtime {
         })) as unknown as Duplex;
         this.stdin = stream;
       }
-      this.stdin.write(`${normalized}\n`);
+      await writeLine(this.stdin, `${normalized}\n`);
+      return { ok: true };
     } catch {
       consoleBus.push(
         this.instance.id,
@@ -212,6 +213,10 @@ export class DockerRuntime implements Runtime {
         "system",
         "error",
       );
+      return {
+        ok: false,
+        error: "Failed to deliver command to container stdin.",
+      };
     }
   }
 
@@ -382,6 +387,15 @@ export class DockerRuntime implements Runtime {
       });
     });
   }
+}
+
+function writeLine(stream: NodeJS.WritableStream, line: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    stream.write(line, (error?: Error | null) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
 
 function isDockerNotFound(error: unknown): error is { statusCode: 404 } {
