@@ -41,7 +41,7 @@ describe("GTA players view helpers", () => {
     it("matches name, server id, stable player id, and identifier values", () => {
       expect(matchesGtaPlayerQuery(players[0], " nova ")).toBe(true);
       expect(matchesGtaPlayerQuery(players[0], "42")).toBe(true);
-      expect(matchesGtaPlayerQuery(players[0], "ALPHA")).toBe(true);
+      expect(matchesGtaPlayerQuery(players[0], "GTA_LICENSE")).toBe(true);
       expect(matchesGtaPlayerQuery(players[0], "discord:1234")).toBe(true);
     });
 
