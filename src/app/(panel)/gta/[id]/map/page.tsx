@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/panel/page-header";
 import { SectionCard } from "@/components/panel/section-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const MIN_ZOOM = 0.75;
 const MAX_ZOOM = 2.25;
@@ -133,91 +134,95 @@ export default function GtaMapPage() {
         }
         bodyClassName="p-0"
       >
-        <div className="grid min-h-[34rem] lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="relative min-h-[24rem] overflow-hidden bg-background">
-            <div
-              className="absolute inset-0 cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing"
-              style={surfaceGridStyle}
-              onPointerDown={startPan}
-              onPointerMove={movePan}
-              onPointerUp={stopPan}
-              onPointerCancel={stopPan}
-            >
+        {isLoading && !data ? (
+          <GtaMapSkeleton />
+        ) : (
+          <div className="grid min-h-[34rem] lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <div className="relative min-h-[24rem] overflow-hidden bg-background">
               <div
-                className="absolute inset-[6%] rounded-lg border border-border/80 shadow-inner"
-                style={{
-                  backgroundImage: mapBackgroundImage,
-                  transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-                  transformOrigin: "center",
-                }}
+                className="absolute inset-0 cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing"
+                style={surfaceGridStyle}
+                onPointerDown={startPan}
+                onPointerMove={movePan}
+                onPointerUp={stopPan}
+                onPointerCancel={stopPan}
               >
                 <div
-                  className="absolute inset-0 rounded-lg"
-                  style={{ backgroundImage: mapGridImage }}
-                />
-                <div className="absolute left-1/2 top-0 h-full w-px bg-primary/30" />
-                <div className="absolute left-0 top-1/2 h-px w-full bg-primary/30" />
-                <div className="absolute left-1/2 top-1/2 size-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/25" />
-                <div className="absolute left-1/2 top-1/2 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/15" />
-
-                {mappedPlayers.map((player) => (
-                  <PlayerMarker
-                    key={player.id}
-                    player={player}
-                    active={player.id === activePlayer?.id}
-                    onSelect={() => setActivePlayerId(player.id)}
+                  className="absolute inset-[6%] rounded-lg border border-border/80 shadow-inner"
+                  style={{
+                    backgroundImage: mapBackgroundImage,
+                    transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+                    transformOrigin: "center",
+                  }}
+                >
+                  <div
+                    className="absolute inset-0 rounded-lg"
+                    style={{ backgroundImage: mapGridImage }}
                   />
-                ))}
+                  <div className="absolute left-1/2 top-0 h-full w-px bg-primary/30" />
+                  <div className="absolute left-0 top-1/2 h-px w-full bg-primary/30" />
+                  <div className="absolute left-1/2 top-1/2 size-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/25" />
+                  <div className="absolute left-1/2 top-1/2 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/15" />
+
+                  {mappedPlayers.map((player) => (
+                    <PlayerMarker
+                      key={player.id}
+                      player={player}
+                      active={player.id === activePlayer?.id}
+                      onSelect={() => setActivePlayerId(player.id)}
+                    />
+                  ))}
+                </div>
               </div>
+
+              <div className="absolute right-3 top-3 flex flex-col gap-2">
+                <Badge variant="default">{onlineCount} online</Badge>
+                <div className="flex rounded-lg border border-border bg-background/90 p-1 shadow-sm backdrop-blur">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Zoom out"
+                    onClick={() => zoomBy(-ZOOM_STEP)}
+                  >
+                    <MinusIcon />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Reset map view"
+                    onClick={resetView}
+                  >
+                    <RotateCcwIcon />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Zoom in"
+                    onClick={() => zoomBy(ZOOM_STEP)}
+                  >
+                    <PlusIcon />
+                  </Button>
+                </div>
+              </div>
+
+              {mappedPlayers.length === 0 && (
+                <div className="absolute inset-x-4 top-1/2 mx-auto max-w-sm -translate-y-1/2 rounded-lg border border-border bg-background/95 p-4 text-center shadow-sm">
+                  <p className="font-medium text-foreground">
+                    {bridgeOnline ? "No mapped players" : "Bridge offline"}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {isLoading ? "Loading live telemetry..." : "Waiting for live coordinates."}
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="absolute right-3 top-3 flex flex-col gap-2">
-              <Badge variant="default">{onlineCount} online</Badge>
-              <div className="flex rounded-lg border border-border bg-background/90 p-1 shadow-sm backdrop-blur">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Zoom out"
-                  onClick={() => zoomBy(-ZOOM_STEP)}
-                >
-                  <MinusIcon />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Reset map view"
-                  onClick={resetView}
-                >
-                  <RotateCcwIcon />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Zoom in"
-                  onClick={() => zoomBy(ZOOM_STEP)}
-                >
-                  <PlusIcon />
-                </Button>
-              </div>
-            </div>
-
-            {mappedPlayers.length === 0 && (
-              <div className="absolute inset-x-4 top-1/2 mx-auto max-w-sm -translate-y-1/2 rounded-lg border border-border bg-background/95 p-4 text-center shadow-sm">
-                <p className="font-medium text-foreground">
-                  {bridgeOnline ? "No mapped players" : "Bridge offline"}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {isLoading ? "Loading live telemetry..." : "Waiting for live coordinates."}
-                </p>
-              </div>
-            )}
+            <PlayerDetails player={activePlayer} />
           </div>
-
-          <PlayerDetails player={activePlayer} />
-        </div>
+        )}
       </SectionCard>
     </div>
   );
@@ -301,8 +306,31 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function GtaMapSkeleton() {
+  return (
+    <div className="grid min-h-[34rem] lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="p-4">
+        <Skeleton className="h-[24rem] w-full rounded-lg lg:h-[32rem]" />
+      </div>
+      <aside className="border-t border-border bg-muted/20 p-4 lg:border-l lg:border-t-0">
+        <div className="grid gap-3">
+          <Skeleton className="h-6 w-2/3" />
+          <Skeleton className="h-4 w-1/2" />
+          <div className="grid gap-2 pt-2">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} className="h-16 w-full rounded-lg" />
+            ))}
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 function formatHeading(value: number | undefined): string {
-  return value === undefined || !Number.isFinite(value) ? "Unknown" : `${Math.round(value)} deg`;
+  return value === undefined || !Number.isFinite(value)
+    ? "Unknown"
+    : `${Math.round(value)} deg`;
 }
 
 function clampZoom(value: number): number {
