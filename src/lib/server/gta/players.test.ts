@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   GtaBridgePlayer,
   GtaPlayerActionInput,
@@ -68,6 +68,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
+  vi.restoreAllMocks();
 });
 
 describe("GTA players", () => {
@@ -200,6 +201,65 @@ describe("GTA players", () => {
     expect(roster.players[0].punishments[0]).toMatchObject({
       playerId: buildGtaPlayerId(licenseAndSteam),
       reason: "Stay canonical",
+    });
+  });
+
+  it("does not rewrite punishments on heartbeat when no player id migration occurs", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const joined = await recordGtaPlayerJoin(inst, bridgePlayer(), now);
+    await recordGtaPlayerAction(
+      inst,
+      { action: "ban", playerId: joined.player.id, reason: "Keep this ban" },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+
+    const writeSpy = vi.spyOn(fs, "writeFile");
+    await recordGtaHeartbeat(inst, [bridgePlayer()], now + 2);
+
+    const punishmentWrites = writeSpy.mock.calls.filter(([file]) =>
+      String(file).includes("punishments.json"),
+    );
+    expect(punishmentWrites).toHaveLength(0);
+  });
+
+  it("migrates a non-durable live player by server id when durable identifiers appear", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const ipOnly = bridgePlayer({
+      serverId: 7,
+      name: "Temporary Identity",
+      identifiers: [{ type: "ip", value: "ip:203.0.113.9" }],
+    });
+    const licensed = bridgePlayer({
+      serverId: 7,
+      name: "Licensed Identity",
+      identifiers: [{ type: "license", value: "license:live-slot" }],
+    });
+
+    const joined = await recordGtaPlayerJoin(inst, ipOnly, now);
+    await recordGtaPlayerAction(
+      inst,
+      { action: "warn", playerId: joined.player.id, reason: "Same session" },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+    await recordGtaHeartbeat(inst, [licensed], now + 2);
+
+    const roster = await listGtaPlayers(inst, now + 3);
+
+    expect(roster.onlineCount).toBe(1);
+    expect(roster.players).toHaveLength(1);
+    expect(roster.players[0].id).toBe(buildGtaPlayerId(licensed));
+    expect(roster.players[0].sessions).toHaveLength(1);
+    expect(roster.players[0].sessions[0].playerId).toBe(
+      buildGtaPlayerId(licensed),
+    );
+    expect(roster.players[0].punishments).toHaveLength(1);
+    expect(roster.players[0].punishments[0]).toMatchObject({
+      playerId: buildGtaPlayerId(licensed),
+      reason: "Same session",
     });
   });
 

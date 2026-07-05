@@ -32,6 +32,11 @@ type GtaPlayerStore = {
   punishments: GtaPunishment[];
 };
 
+type UpsertGtaPlayerResult = {
+  player: StoredGtaPlayer;
+  punishmentsChanged: boolean;
+};
+
 const ONLINE_WINDOW_MS = 30_000;
 const IDENTITY_PRIORITY: GtaIdentifierType[] = [
   "license",
@@ -62,13 +67,17 @@ export async function recordGtaHeartbeat(
 ): Promise<GtaPlayersPayload> {
   const store = await readStore(inst);
   closeStaleSessions(store, now);
+  let punishmentsChanged = false;
   for (const player of players) {
-    const stored = upsertBridgePlayer(store, player, now);
-    ensureOpenSession(store.sessions, stored, now);
+    const result = upsertBridgePlayer(store, player, now);
+    punishmentsChanged ||= result.punishmentsChanged;
+    ensureOpenSession(store.sessions, result.player, now);
   }
   await writeJsonFile(playersFile(inst), store.players);
   await writeJsonFile(sessionsFile(inst), store.sessions);
-  await writeJsonFile(punishmentsFile(inst), store.punishments);
+  if (punishmentsChanged) {
+    await writeJsonFile(punishmentsFile(inst), store.punishments);
+  }
   return playersPayload(store, now);
 }
 
@@ -79,13 +88,20 @@ export async function recordGtaPlayerJoin(
 ): Promise<{ player: GtaPlayerSummary }> {
   const store = await readStore(inst);
   closeStaleSessions(store, now);
-  const stored = upsertBridgePlayer(store, player, now);
-  ensureOpenSession(store.sessions, stored, now);
+  const result = upsertBridgePlayer(store, player, now);
+  ensureOpenSession(store.sessions, result.player, now);
   await writeJsonFile(playersFile(inst), store.players);
   await writeJsonFile(sessionsFile(inst), store.sessions);
-  await writeJsonFile(punishmentsFile(inst), store.punishments);
+  if (result.punishmentsChanged) {
+    await writeJsonFile(punishmentsFile(inst), store.punishments);
+  }
   return {
-    player: playerSummary(stored, store.sessions, store.punishments, now),
+    player: playerSummary(
+      result.player,
+      store.sessions,
+      store.punishments,
+      now,
+    ),
   };
 }
 
@@ -225,7 +241,7 @@ function upsertBridgePlayer(
   store: GtaPlayerStore,
   bridgePlayer: GtaBridgePlayer,
   now: number,
-): StoredGtaPlayer {
+): UpsertGtaPlayerResult {
   const identifiers = normalizeIdentifiers(bridgePlayer.identifiers);
   const incomingId = buildGtaPlayerId({
     name: bridgePlayer.name,
@@ -234,7 +250,8 @@ function upsertBridgePlayer(
   const matchingPlayers = store.players.filter(
     (player) =>
       player.id === incomingId ||
-      durableIdentifiersOverlap(player.identifiers, identifiers),
+      durableIdentifiersOverlap(player.identifiers, identifiers) ||
+      sameNonDurableLiveServerId(player, bridgePlayer.serverId, now),
   );
   const mergedIdentifiers = matchingPlayers.reduce(
     (merged, player) => mergeIdentifiers(merged, player.identifiers),
@@ -271,7 +288,7 @@ function upsertBridgePlayer(
     store.players = store.players.filter(
       (player) => player === current || !matchingPlayers.includes(player),
     );
-    migrateRelatedPlayerIds(store, oldIds, id);
+    const punishmentsChanged = migrateRelatedPlayerIds(store, oldIds, id);
     current.name = bridgePlayer.name;
     current.online = true;
     current.serverId = bridgePlayer.serverId;
@@ -279,7 +296,7 @@ function upsertBridgePlayer(
     current.identifiers = mergeIdentifiers(current.identifiers, identifiers);
     current.lastSeenAt = now;
     current.lastHeartbeatAt = now;
-    return current;
+    return { player: current, punishmentsChanged };
   }
 
   const created: StoredGtaPlayer = {
@@ -294,24 +311,30 @@ function upsertBridgePlayer(
     lastHeartbeatAt: now,
   };
   store.players.push(created);
-  return created;
+  return { player: created, punishmentsChanged: false };
 }
 
 function migrateRelatedPlayerIds(
   store: GtaPlayerStore,
   oldIds: string[],
   nextId: string,
-): void {
+): boolean {
+  let punishmentsChanged = false;
   for (const session of store.sessions) {
-    if (oldIds.includes(session.playerId)) {
+    if (oldIds.includes(session.playerId) && session.playerId !== nextId) {
       session.playerId = nextId;
     }
   }
   for (const punishment of store.punishments) {
-    if (oldIds.includes(punishment.playerId)) {
+    if (
+      oldIds.includes(punishment.playerId) &&
+      punishment.playerId !== nextId
+    ) {
       punishment.playerId = nextId;
+      punishmentsChanged = true;
     }
   }
+  return punishmentsChanged;
 }
 
 function ensureOpenSession(
@@ -437,6 +460,18 @@ function isOnline(player: StoredGtaPlayer, now: number): boolean {
     player.online === true &&
     player.lastHeartbeatAt !== undefined &&
     now - player.lastHeartbeatAt <= ONLINE_WINDOW_MS
+  );
+}
+
+function sameNonDurableLiveServerId(
+  player: StoredGtaPlayer,
+  serverId: number,
+  now: number,
+): boolean {
+  return (
+    player.serverId === serverId &&
+    durableIdentifierKeys(player.identifiers).length === 0 &&
+    isOnline(player, now)
   );
 }
 
