@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 const TABS = [
   { key: "overview", label: "Overview", segment: "" },
   { key: "console", label: "Console", segment: "console" },
+  { key: "players", label: "Players", segment: "players" },
   { key: "files", label: "Files", segment: "files" },
   { key: "settings", label: "Settings", segment: "settings" },
 ] as const;

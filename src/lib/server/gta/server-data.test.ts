@@ -113,4 +113,94 @@ describe("GTA server data", () => {
 
     expect(childProcessMocks.execFile).not.toHaveBeenCalled();
   });
+
+  it("returns null when no bridge token has been seeded", async () => {
+    const { gtaSecretTemplate, readGtaBridgeToken } = await loadModule();
+    const inst = instance();
+
+    await expect(readGtaBridgeToken(inst)).resolves.toBeNull();
+
+    await fs.mkdir(inst.dataPath, { recursive: true });
+    await fs.writeFile(path.join(inst.dataPath, "server.secret.cfg"), gtaSecretTemplate(), "utf8");
+
+    await expect(readGtaBridgeToken(inst)).resolves.toBeNull();
+  });
+
+  it("seeds the Slutvival admin resource and bridge token", async () => {
+    const { ensureGtaServerData, readGtaBridgeToken } = await loadModule();
+    const inst = instance();
+
+    await ensureGtaServerData(inst, { cloneBaseResources: false });
+
+    const manifest = await fs.readFile(
+      path.join(inst.dataPath, "resources", "[slutvival]", "slutvival-admin", "fxmanifest.lua"),
+      "utf8",
+    );
+    const serverLua = await fs.readFile(
+      path.join(inst.dataPath, "resources", "[slutvival]", "slutvival-admin", "server.lua"),
+      "utf8",
+    );
+    const secret = await fs.readFile(path.join(inst.dataPath, "server.secret.cfg"), "utf8");
+
+    expect(manifest).toContain("fx_version");
+    expect(serverLua).toContain("slutvival_kick");
+    expect(serverLua).toContain("playerConnecting");
+    expect(secret).toMatch(/set slutvival_bridge_token "[a-f0-9]{48}"/);
+    await expect(readGtaBridgeToken(inst)).resolves.toMatch(/[a-f0-9]{48}/);
+  });
+
+  it("starts slutvival-admin after secrets are executed", async () => {
+    const { ensureGtaServerData } = await loadModule();
+    const inst = instance();
+
+    await ensureGtaServerData(inst, { cloneBaseResources: false });
+
+    const cfg = await fs.readFile(path.join(inst.dataPath, "server.cfg"), "utf8");
+    expect(cfg.indexOf("exec server.secret.cfg")).toBeGreaterThan(-1);
+    expect(cfg.indexOf("ensure slutvival-admin")).toBeGreaterThan(
+      cfg.indexOf("exec server.secret.cfg"),
+    );
+    expect(cfg).toContain('set slutvival_panel_url "http://slutvival-panel:3000"');
+    expect(cfg).toContain('set slutvival_panel_server_id "los-santos"');
+  });
+
+  it("generates the admin bridge payload contract", async () => {
+    const { ensureGtaServerData } = await loadModule();
+    const inst = instance();
+
+    await ensureGtaServerData(inst, { cloneBaseResources: false });
+
+    const serverLua = await fs.readFile(
+      path.join(inst.dataPath, "resources", "[slutvival]", "slutvival-admin", "server.lua"),
+      "utf8",
+    );
+
+    expect(serverLua).toContain("payload.type = eventName");
+    expect(serverLua).not.toContain("payload.event = eventName");
+    expect(serverLua).toContain("players = collectPlayers()");
+    expect(serverLua).toContain("serverId = tonumber(player)");
+    expect(serverLua).toContain("type = identifierType");
+    expect(serverLua).toContain("SUPPORTED_IDENTIFIER_TYPES");
+    expect(serverLua).toContain("SUPPORTED_IDENTIFIER_TYPES[identifierType]");
+    expect(serverLua).toContain("license = true");
+    expect(serverLua).toContain("license2 = true");
+    expect(serverLua).toContain("discord = true");
+    expect(serverLua).toContain("steam = true");
+    expect(serverLua).toContain("fivem = true");
+    expect(serverLua).toContain("ip = true");
+    expect(serverLua).toContain("player = collectPlayer(player, playerName)");
+    expect(serverLua).not.toContain("playerSource = player");
+    expect(serverLua).not.toContain("print(bridgeToken)");
+  });
+
+  it("does not replace an existing bridge token", async () => {
+    const { ensureGtaServerData, readGtaBridgeToken } = await loadModule();
+    const inst = instance();
+    await ensureGtaServerData(inst, { cloneBaseResources: false });
+    const first = await readGtaBridgeToken(inst);
+
+    await ensureGtaServerData(inst, { cloneBaseResources: false });
+
+    await expect(readGtaBridgeToken(inst)).resolves.toBe(first);
+  });
 });

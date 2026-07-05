@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { nimbusPublicAddress } from "./constants";
+
+vi.mock("./docker-proxy", () => ({
+  ensureNimbusProxy: vi.fn(),
+  isNimbusProxyRunning: vi.fn(async () => false),
+}));
+
+vi.mock("@/lib/server/supervisor", () => ({
+  supervisor: { power: vi.fn() },
+}));
+
 import { getVintageNetworkStatus } from "./service";
 
 describe("vintage network service contract", () => {

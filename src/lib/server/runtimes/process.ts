@@ -5,7 +5,7 @@ import type { Instance, Player, ServerStats, ServerStatus } from "@/lib/types";
 import { instanceDir, instanceDataPath, instanceServerPath } from "../config";
 import { normalizeConsoleCommand } from "../commands";
 import { consoleBus } from "../console-bus";
-import type { Runtime } from "./types";
+import type { CommandDeliveryResult, Runtime } from "./types";
 
 /**
  * Launches Vintage Story directly as a child process:
@@ -139,15 +139,20 @@ export class ProcessRuntime implements Runtime {
     this.child?.kill("SIGKILL");
   }
 
-  async sendCommand(command: string) {
+  async sendCommand(command: string): Promise<CommandDeliveryResult> {
     const normalized = normalizeConsoleCommand(command);
-    if (!normalized) return;
+    if (!normalized) return { ok: false, error: "command is required" };
     consoleBus.push(this.instance.id, normalized, "command");
     if (!this.child) {
       consoleBus.push(this.instance.id, "Server is not running.", "system", "warning");
-      return;
+      return { ok: false, error: "Server is not running." };
     }
-    this.child.stdin.write(`${normalized}\n`);
+    try {
+      await writeLine(this.child.stdin, `${normalized}\n`);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: errorMessage(error) };
+    }
   }
 
   private ingest(chunk: string, stream: "stdout" | "stderr") {
@@ -211,6 +216,19 @@ export class ProcessRuntime implements Runtime {
   getPlayers() {
     return [...this.players.values()];
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function writeLine(stream: NodeJS.WritableStream, line: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    stream.write(line, (error?: Error | null) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
 
 function emptyStats(limit: number): ServerStats {

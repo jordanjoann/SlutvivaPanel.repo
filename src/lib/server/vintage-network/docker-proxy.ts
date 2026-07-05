@@ -1,12 +1,15 @@
-import Docker from "dockerode";
+import type Docker from "dockerode";
 import { config } from "@/lib/server/config";
 import { NIMBUS_PROXY_CONTAINER } from "./constants";
 
 const NIMBUS_PROXY_IMAGE = "mcr.microsoft.com/dotnet/aspnet:10.0";
 
 let dockerClient: Docker | null = null;
-function docker(): Docker {
-  if (!dockerClient) dockerClient = new Docker({ socketPath: config.docker.socket });
+async function docker(): Promise<Docker> {
+  if (!dockerClient) {
+    const { default: DockerClient } = await import("dockerode");
+    dockerClient = new DockerClient({ socketPath: config.docker.socket });
+  }
   return dockerClient;
 }
 
@@ -40,7 +43,7 @@ export function nimbusProxyContainerSpec(runtimeDir: string): Docker.ContainerCr
 
 export async function isNimbusProxyRunning(): Promise<boolean> {
   try {
-    const info = await docker().getContainer(NIMBUS_PROXY_CONTAINER).inspect();
+    const info = await (await docker()).getContainer(NIMBUS_PROXY_CONTAINER).inspect();
     return Boolean(info.State.Running);
   } catch (error) {
     if (isDockerNotFound(error)) return false;
@@ -49,7 +52,7 @@ export async function isNimbusProxyRunning(): Promise<boolean> {
 }
 
 export async function ensureNimbusProxy(runtimeDir: string): Promise<void> {
-  const container = docker().getContainer(NIMBUS_PROXY_CONTAINER);
+  const container = (await docker()).getContainer(NIMBUS_PROXY_CONTAINER);
   const desired = nimbusProxyContainerSpec(runtimeDir);
   try {
     const info = await container.inspect();
@@ -74,21 +77,22 @@ export async function ensureNimbusProxy(runtimeDir: string): Promise<void> {
   }
 
   await ensureImage(NIMBUS_PROXY_IMAGE);
-  await docker().createContainer(desired);
+  await (await docker()).createContainer(desired);
   await container.start();
 }
 
 async function ensureImage(image: string): Promise<void> {
   try {
-    await docker().getImage(image).inspect();
+    await (await docker()).getImage(image).inspect();
     return;
   } catch (error) {
     if (!isDockerNotFound(error)) throw error;
   }
 
-  const stream = await docker().pull(image);
+  const client = await docker();
+  const stream = await client.pull(image);
   await new Promise<void>((resolve, reject) => {
-    docker().modem.followProgress(stream, (error: Error | null) => {
+    client.modem.followProgress(stream, (error: Error | null) => {
       if (error) reject(error);
       else resolve();
     });

@@ -6,7 +6,7 @@ import type {
 } from "@/lib/types";
 import { normalizeConsoleCommand } from "../commands";
 import { consoleBus } from "../console-bus";
-import type { Runtime } from "./types";
+import type { CommandDeliveryResult, Runtime } from "./types";
 
 const NAME_POOL = [
   "AshFallen",
@@ -235,17 +235,17 @@ export class SimulatedRuntime implements Runtime {
     return this.players.map((p) => ({ ...p }));
   }
 
-  async sendCommand(command: string) {
+  async sendCommand(command: string): Promise<CommandDeliveryResult> {
     const id = this.instance.id;
     const normalized = normalizeConsoleCommand(command);
-    if (!normalized) return;
+    if (!normalized) return { ok: false, error: "command is required" };
     consoleBus.push(id, normalized, "command");
     const [cmd, ...args] = normalized.split(/\s+/);
     const arg = args.join(" ");
 
     if (this.status !== "running" && cmd !== "start") {
       consoleBus.push(id, `Server is not running.`, "system", "warning");
-      return;
+      return { ok: false, error: "Server is not running." };
     }
 
     switch (cmd.toLowerCase()) {
@@ -342,5 +342,6 @@ export class SimulatedRuntime implements Runtime {
       default:
         consoleBus.push(id, `Unknown command '${cmd}'. Type /help.`, "system", "warning");
     }
+    return { ok: true };
   }
 }

@@ -5,6 +5,9 @@ import type {
   FileContent,
   FileNode,
   GameVersion,
+  GtaPlayerActionInput,
+  GtaPlayerActionResult,
+  GtaPlayersPayload,
   InstalledMod,
   Instance,
   InstanceWithState,
@@ -98,6 +101,19 @@ export const api = {
         name,
         ...extra,
       }),
+  },
+
+  gta: {
+    players: {
+      list: (id: string) =>
+        fetcher<GtaPlayersPayload>(`/api/instances/${id}/gta/players`),
+      action: (id: string, body: GtaPlayerActionInput) =>
+        send<GtaPlayerActionResult>(
+          `/api/instances/${id}/gta/players/action`,
+          "POST",
+          body,
+        ),
+    },
   },
 
   files: {
