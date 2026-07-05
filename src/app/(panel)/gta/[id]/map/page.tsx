@@ -65,6 +65,12 @@ export default function GtaMapPage() {
   const onlineCount = data?.onlineCount ?? 0;
   const unmappedCount = Math.max(0, onlineCount - mappedPlayers.length);
   const bridgeOnline = data?.bridge.online ?? false;
+  const loadingInitialData = isLoading && !data;
+  const mapDescription = loadingInitialData
+    ? "Loading live telemetry"
+    : unmappedCount > 0
+      ? `${mappedPlayers.length} mapped, ${unmappedCount} without coordinates`
+      : `${mappedPlayers.length} mapped players`;
   const activePlayer =
     mappedPlayers.find((player) => player.id === activePlayerId) ??
     mappedPlayers[0] ??
@@ -118,23 +124,28 @@ export default function GtaMapPage() {
 
       <SectionCard
         title="Live server map"
-        description={
-          unmappedCount > 0
-            ? `${mappedPlayers.length} mapped, ${unmappedCount} without coordinates`
-            : `${mappedPlayers.length} mapped players`
-        }
+        description={mapDescription}
         icon={MapIcon}
         action={
           <div className="flex flex-wrap justify-end gap-2">
-            <Badge variant={bridgeOnline ? "default" : "outline"}>
-              {bridgeOnline ? "Bridge online" : "Bridge offline"}
-            </Badge>
-            <Badge variant="secondary">{onlineCount} online</Badge>
+            {loadingInitialData ? (
+              <>
+                <Skeleton className="h-5 w-24 rounded-4xl" />
+                <Skeleton className="h-5 w-16 rounded-4xl" />
+              </>
+            ) : (
+              <>
+                <Badge variant={bridgeOnline ? "default" : "outline"}>
+                  {bridgeOnline ? "Bridge online" : "Bridge offline"}
+                </Badge>
+                <Badge variant="secondary">{onlineCount} online</Badge>
+              </>
+            )}
           </div>
         }
         bodyClassName="p-0"
       >
-        {isLoading && !data ? (
+        {loadingInitialData ? (
           <GtaMapSkeleton />
         ) : (
           <div className="grid min-h-[34rem] lg:grid-cols-[minmax(0,1fr)_20rem]">
