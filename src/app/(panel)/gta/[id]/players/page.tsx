@@ -63,6 +63,7 @@ const FILTER_OPTIONS: { value: GtaPlayerFilter; label: string }[] = [
 ];
 
 type ReasonAction = Extract<GtaPunishmentType, "warn" | "ban">;
+type ReasonTarget = { action: ReasonAction; player: GtaPlayerSummary };
 
 export default function GtaPlayersPage() {
   const { id } = useParams<{ id: string }>();
@@ -70,7 +71,7 @@ export default function GtaPlayersPage() {
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState<GtaPlayerFilter>("all");
   const [selectedId, setSelectedId] = React.useState("");
-  const [reasonAction, setReasonAction] = React.useState<ReasonAction | null>(null);
+  const [reasonTarget, setReasonTarget] = React.useState<ReasonTarget | null>(null);
   const [reason, setReason] = React.useState("");
   const [busyAction, setBusyAction] = React.useState<GtaPunishmentType | null>(null);
 
@@ -89,7 +90,7 @@ export default function GtaPlayersPage() {
   }, [players]);
 
   function closeReasonDialog() {
-    setReasonAction(null);
+    setReasonTarget(null);
     setReason("");
   }
 
@@ -99,24 +100,31 @@ export default function GtaPlayersPage() {
     actionReason?: string,
   ) {
     const trimmedReason = actionReason?.trim();
+    let result: GtaPlayerActionResult;
+
     try {
       setBusyAction(action);
-      const result = await api.gta.players.action(id, {
+      result = await api.gta.players.action(id, {
         action,
         playerId: player.id,
         reason: trimmedReason || undefined,
       });
-      await mutate();
-      toastActionResult(action, player.name, result);
-      return true;
     } catch (error) {
       toast.error(`Failed to ${action}`, {
-        description: error instanceof Error ? error.message : undefined,
+        description: errorDescription(error),
       });
       return false;
     } finally {
       setBusyAction(null);
     }
+
+    toastActionResult(action, player.name, result);
+    void mutate().catch((error) => {
+      toast.warning("Action recorded, refresh failed", {
+        description: errorDescription(error),
+      });
+    });
+    return true;
   }
 
   function confirmKick(player: GtaPlayerSummary) {
@@ -132,15 +140,15 @@ export default function GtaPlayersPage() {
   }
 
   function submitReasonAction() {
-    if (!selected || !reasonAction) return;
+    if (!reasonTarget) return;
     const trimmedReason = reason.trim();
     if (!trimmedReason) {
       toast.error("Reason is required");
       return;
     }
 
-    if (reasonAction === "ban") {
-      const player = selected;
+    if (reasonTarget.action === "ban") {
+      const { player } = reasonTarget;
       confirm({
         title: `Ban ${player.name}?`,
         description: "The ban will be recorded and the player will be disconnected if online.",
@@ -155,7 +163,7 @@ export default function GtaPlayersPage() {
       return;
     }
 
-    runAction("warn", selected, trimmedReason).then((ok) => {
+    runAction("warn", reasonTarget.player, trimmedReason).then((ok) => {
       if (ok) closeReasonDialog();
     });
   }
@@ -250,7 +258,7 @@ export default function GtaPlayersPage() {
                     variant="outline"
                     size="sm"
                     disabled={busyAction === "warn"}
-                    onClick={() => setReasonAction("warn")}
+                    onClick={() => setReasonTarget({ action: "warn", player: selected })}
                   >
                     <MessageSquareWarningIcon data-icon="inline-start" />
                     Warn
@@ -259,7 +267,7 @@ export default function GtaPlayersPage() {
                     variant="destructive"
                     size="sm"
                     disabled={busyAction === "ban"}
-                    onClick={() => setReasonAction("ban")}
+                    onClick={() => setReasonTarget({ action: "ban", player: selected })}
                   >
                     <BanIcon data-icon="inline-start" />
                     Ban
@@ -278,10 +286,10 @@ export default function GtaPlayersPage() {
       )}
 
       <ReasonDialog
-        action={reasonAction}
-        playerName={selected?.name ?? ""}
+        action={reasonTarget?.action ?? null}
+        playerName={reasonTarget?.player.name ?? ""}
         reason={reason}
-        busy={busyAction === reasonAction}
+        busy={busyAction === reasonTarget?.action}
         onReasonChange={setReason}
         onOpenChange={(open) => {
           if (!open) closeReasonDialog();
@@ -620,6 +628,10 @@ function toastActionResult(
     ban: "Banned",
   };
   toast.success(`${labels[action]} ${playerName}`);
+}
+
+function errorDescription(error: unknown) {
+  return error instanceof Error ? error.message : undefined;
 }
 
 function avatarInitials(name: string) {
