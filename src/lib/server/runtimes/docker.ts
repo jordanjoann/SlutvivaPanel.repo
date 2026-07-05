@@ -6,6 +6,12 @@ import { consoleBus } from "../console-bus";
 import { normalizeConsoleCommand } from "../commands";
 import type { Runtime } from "./types";
 import {
+  backendPortBindings,
+  normalizeDockerRuntimeStats,
+} from "./docker-helpers";
+import { ensureFxServerBaseImage } from "../gta/base-image";
+import { hasUsableGtaSecret } from "../gta/server-data";
+import {
   dockerCommand,
   dockerMounts,
   ensureInstanceDockerFiles,
@@ -13,6 +19,11 @@ import {
   normalizeDockerImage,
 } from "../provisioning";
 import { ensureRunnableServerConfig } from "../seed";
+
+export {
+  backendPortBindings,
+  normalizeDockerRuntimeStats,
+} from "./docker-helpers";
 
 let dockerClient: Docker | null = null;
 function docker(): Docker {
@@ -82,7 +93,7 @@ export class DockerRuntime implements Runtime {
   }
 
   private image() {
-    return normalizeDockerImage(this.instance.docker.image);
+    return normalizeDockerImage(this.instance.docker.image, this.instance.game);
   }
 
   getStatus() {
@@ -244,6 +255,15 @@ export class DockerRuntime implements Runtime {
 
   private async ensureContainer() {
     await ensureRunnableServerConfig(this.instance);
+    if (this.instance.game === "gta" && !(await hasUsableGtaSecret(this.instance))) {
+      consoleBus.push(
+        this.instance.id,
+        "GTA setup incomplete: add a real Cfx.re sv_licenseKey to server-data/server.secret.cfg.",
+        "system",
+        "error",
+      );
+      throw new Error("GTA setup incomplete: missing Cfx.re sv_licenseKey");
+    }
     await ensureServerInstalled(this.instance, {
       onLog: (message) => consoleBus.push(this.instance.id, message, "system"),
     });
@@ -269,7 +289,7 @@ export class DockerRuntime implements Runtime {
     await docker().createContainer({
       name: this.instance.docker.containerName,
       Image: this.image(),
-      WorkingDir: "/server",
+      WorkingDir: this.instance.game === "gta" ? "/server-data" : "/server",
       Cmd: dockerCommand(this.instance),
       OpenStdin: true,
       AttachStdin: true,
@@ -278,13 +298,13 @@ export class DockerRuntime implements Runtime {
         [`${port}/tcp`]: {},
         [`${port}/udp`]: {},
       },
-      Env: [
-        `VINTAGE_STORY_SERVER_VERSION=${this.instance.version}`,
-        "VINTAGE_STORY_DATA_PATH=/data",
-      ],
+      Env: this.instance.game === "gta"
+        ? [`FXSERVER_BUILD=${this.instance.version}`, "FXSERVER_DATA_PATH=/server-data"]
+        : [`VINTAGE_STORY_SERVER_VERSION=${this.instance.version}`, "VINTAGE_STORY_DATA_PATH=/data"],
       Labels: {
         "slutvival.panel.managed": "true",
         "slutvival.panel.instance": this.instance.id,
+        "slutvival.panel.game": this.instance.game,
       },
       HostConfig: {
         Binds: dockerMounts(this.instance),
@@ -342,6 +362,13 @@ export class DockerRuntime implements Runtime {
       if (!isDockerNotFound(e)) throw e;
     }
 
+    if (this.instance.game === "gta") {
+      await ensureFxServerBaseImage(docker(), this.image(), (message) =>
+        consoleBus.push(this.instance.id, message, "system"),
+      );
+      return;
+    }
+
     consoleBus.push(
       this.instance.id,
       `Pulling Docker image ${this.image()}...`,
@@ -373,55 +400,4 @@ function isDockerNotModified(error: unknown): error is { statusCode: 304 } {
     "statusCode" in error &&
     error.statusCode === 304
   );
-}
-
-export function normalizeDockerRuntimeStats(
-  status: ServerStatus,
-  stats: ServerStats,
-): ServerStats {
-  const memoryLimitMB = finiteOrZero(stats.memoryLimitMB);
-  const diskUsedMB = finiteOrZero(stats.diskUsedMB);
-  const diskTotalMB = finiteOrZero(stats.diskTotalMB);
-
-  if (status !== "running") {
-    return {
-      ...stats,
-      cpuPercent: 0,
-      memoryUsedMB: 0,
-      memoryLimitMB,
-      memoryPercent: 0,
-      netRxKBs: 0,
-      netTxKBs: 0,
-      diskUsedMB,
-      diskTotalMB,
-      threads: 0,
-    };
-  }
-
-  return {
-    cpuPercent: finiteOrZero(stats.cpuPercent),
-    memoryUsedMB: finiteOrZero(stats.memoryUsedMB),
-    memoryLimitMB,
-    memoryPercent: finiteOrZero(stats.memoryPercent),
-    netRxKBs: finiteOrZero(stats.netRxKBs),
-    netTxKBs: finiteOrZero(stats.netTxKBs),
-    diskUsedMB,
-    diskTotalMB,
-    threads: finiteOrZero(stats.threads),
-  };
-}
-
-export function backendPortBindings(
-  inst: Instance,
-): Record<string, Array<{ HostPort?: string }>> {
-  const port = String(inst.port);
-  if (inst.game === "vintage-story" && inst.serverEngine === "stratum") return {};
-  return {
-    [`${port}/tcp`]: [{ HostPort: port }],
-    [`${port}/udp`]: [{ HostPort: port }],
-  };
-}
-
-function finiteOrZero(value: number): number {
-  return Number.isFinite(value) ? value : 0;
 }

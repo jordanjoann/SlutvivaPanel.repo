@@ -3,14 +3,17 @@ import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { Instance } from "@/lib/types";
+import type { GameId, Instance } from "@/lib/types";
 import {
   config,
   instanceDataPath,
+  instanceDataPathForGame,
   instanceDir,
   instanceDirForGame,
   instanceServerPath,
+  instanceServerPathForGame,
 } from "./config";
+import { ensureFxServerInstalled } from "./gta/artifacts";
 import { ensureStratumArtifact } from "./vintage-network/artifacts";
 import { packageUrl } from "./versions";
 
@@ -18,17 +21,21 @@ const execFileAsync = promisify(execFile);
 
 const VERSION_MARKER = ".slutvival-version";
 const LEGACY_IMAGE = "slutvival/vintage-story:latest";
+const GTA_IMAGE = "slutvival/fxserver-base:bookworm";
 
-export function normalizeDockerImage(image?: string): string {
+export function normalizeDockerImage(image?: string, game: GameId = "vintage-story"): string {
+  if (game === "gta") return image || GTA_IMAGE;
   if (!image || image === LEGACY_IMAGE) return config.docker.image;
   return image;
 }
 
 export function dockerServiceName(inst: Instance): string {
+  if (inst.game === "gta") return "fxserver";
   return inst.game === "vintage-story" ? "vintage-story" : inst.id;
 }
 
 export function dockerCommand(inst: Instance): string[] {
+  if (inst.game === "gta") return ["bash", "/server/run.sh", "+exec", "server.cfg"];
   if (inst.serverEngine === "stratum") {
     return ["./StratumServer", "--dataPath", "/data"];
   }
@@ -36,6 +43,7 @@ export function dockerCommand(inst: Instance): string[] {
 }
 
 export function serverInstallMarkerValue(inst: Instance): string {
+  if (inst.game === "gta") return `fxserver:${inst.version}`;
   return `${inst.serverEngine}:${inst.version}`;
 }
 
@@ -47,11 +55,21 @@ export async function ensureInstanceDockerFiles(inst: Instance): Promise<void> {
     [
       `SERVER_ID=${inst.id}`,
       `SERVER_NAME=${quoteEnv(inst.name)}`,
-      `VINTAGE_STORY_VERSION=${inst.version}`,
-      `VINTAGE_STORY_PORT=${inst.port}`,
-      `VINTAGE_STORY_IMAGE=${normalizeDockerImage(inst.docker.image)}`,
-      `VINTAGE_STORY_CONTAINER=${inst.docker.containerName}`,
-      `VINTAGE_STORY_NETWORK=${inst.docker.network}`,
+      ...(inst.game === "gta"
+        ? [
+            `FXSERVER_BUILD=${inst.version}`,
+            `FXSERVER_PORT=${inst.port}`,
+            `FXSERVER_IMAGE=${normalizeDockerImage(inst.docker.image, inst.game)}`,
+            `FXSERVER_CONTAINER=${inst.docker.containerName}`,
+            `DOCKER_NETWORK=${inst.docker.network}`,
+          ]
+        : [
+            `VINTAGE_STORY_VERSION=${inst.version}`,
+            `VINTAGE_STORY_PORT=${inst.port}`,
+            `VINTAGE_STORY_IMAGE=${normalizeDockerImage(inst.docker.image, inst.game)}`,
+            `VINTAGE_STORY_CONTAINER=${inst.docker.containerName}`,
+            `VINTAGE_STORY_NETWORK=${inst.docker.network}`,
+          ]),
       "",
     ].join("\n"),
     "utf8",
@@ -67,6 +85,12 @@ export async function ensureServerInstalled(
   inst: Instance,
   options: { force?: boolean; onLog?: (message: string) => void } = {},
 ): Promise<void> {
+  if (inst.game === "gta") {
+    await ensureFxServerInstalled(inst, options);
+    await ensureInstanceDockerFiles(inst);
+    return;
+  }
+
   const installDir = instanceServerPath(inst.id);
 
   if (inst.serverEngine === "stratum") {
@@ -180,8 +204,13 @@ async function validateServerInstall(dir: string): Promise<void> {
 }
 
 export function dockerCompose(inst: Instance): string {
+  if (inst.game === "gta") return gtaDockerCompose(inst);
+  return vintageStoryDockerCompose(inst);
+}
+
+function vintageStoryDockerCompose(inst: Instance): string {
   const service = dockerServiceName(inst);
-  const image = normalizeDockerImage(inst.docker.image);
+  const image = normalizeDockerImage(inst.docker.image, inst.game);
   const cpuLimit = inst.resources.cpuLimit > 0 ? inst.resources.cpuLimit : undefined;
   const cpus = cpuLimit ? `    cpus: "${cpuLimit}"\n` : "";
   const portLines = inst.serverEngine === "stratum"
@@ -227,12 +256,61 @@ export function dockerCompose(inst: Instance): string {
     .join("\n");
 }
 
+function gtaDockerCompose(inst: Instance): string {
+  const service = dockerServiceName(inst);
+  const image = normalizeDockerImage(inst.docker.image, inst.game);
+  const cpuLimit = inst.resources.cpuLimit > 0 ? inst.resources.cpuLimit : undefined;
+  const cpus = cpuLimit ? `    cpus: "${cpuLimit}"\n` : "";
+
+  return [
+    "services:",
+    `  ${service}:`,
+    `    image: ${image}`,
+    `    container_name: ${inst.docker.containerName}`,
+    "    restart: unless-stopped",
+    "    working_dir: /server-data",
+    `    command: ${JSON.stringify(dockerCommand(inst))}`,
+    "    stdin_open: true",
+    "    tty: false",
+    cpus.trimEnd(),
+    `    mem_limit: ${inst.resources.memoryLimitMB}m`,
+    "    networks:",
+    `      - ${inst.docker.network}`,
+    "    ports:",
+    `      - "${inst.port}:${inst.port}/tcp"`,
+    `      - "${inst.port}:${inst.port}/udp"`,
+    "    volumes:",
+    "      - ./server:/server:ro",
+    "      - ./server-data:/server-data:rw",
+    "    environment:",
+    `      FXSERVER_BUILD: "${inst.version}"`,
+    '      FXSERVER_DATA_PATH: "/server-data"',
+    "    labels:",
+    '      slutvival.panel.managed: "true"',
+    `      slutvival.panel.instance: "${inst.id}"`,
+    '      slutvival.panel.game: "gta"',
+    "",
+    "networks:",
+    `  ${inst.docker.network}:`,
+    "    external: true",
+    "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function quoteEnv(value: string): string {
   if (!/[\s#"']/u.test(value)) return value;
   return JSON.stringify(value);
 }
 
 export function dockerMounts(inst: Instance): string[] {
+  if (inst.game === "gta") {
+    return [
+      `${instanceServerPathForGame("gta", inst.id)}:/server:ro`,
+      `${instanceDataPathForGame("gta", inst.id)}:/server-data:rw`,
+    ];
+  }
   const serverMode = inst.serverEngine === "stratum" ? "rw" : "ro";
   return [
     `${instanceServerPath(inst.id)}:/server:${serverMode}`,

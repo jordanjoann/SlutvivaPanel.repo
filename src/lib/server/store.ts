@@ -87,7 +87,7 @@ function withDefaults(partial: Partial<Instance> & { id: string; name: string })
     serverEngine: partial.serverEngine ?? defaultEngineForGame(game),
     docker: {
       containerName: docker.containerName ?? defaultDockerForGame(game, id).containerName,
-      image: normalizeDockerImage(docker.image),
+      image: normalizeDockerImage(docker.image, game),
       network: docker.network ?? config.docker.network,
     },
     resources: partial.resources ?? defaultResourcesForGame(game),
@@ -234,6 +234,7 @@ export async function ensureGtaInstance(): Promise<Instance> {
   if (existing) {
     await ensureInstanceDirs(existing);
     await ensureInstanceDockerFiles(existing);
+    await seedInstanceContent(existing);
     return existing;
   }
 
@@ -256,6 +257,7 @@ export async function ensureGtaInstance(): Promise<Instance> {
   await ensureInstanceDirs(inst);
   await writeInstance(inst);
   await ensureInstanceDockerFiles(inst);
+  await seedInstanceContent(inst);
   return inst;
 }
 

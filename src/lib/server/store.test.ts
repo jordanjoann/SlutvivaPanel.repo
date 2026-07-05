@@ -46,6 +46,8 @@ describe("game-aware instance store", () => {
 
     await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "server.yml"))).resolves.toBeTruthy();
     await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "server-data"))).resolves.toBeTruthy();
+    await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "server-data", "server.cfg"))).resolves.toBeTruthy();
+    await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "server-data", "server.secret.cfg"))).resolves.toBeTruthy();
     await expect(fs.stat(path.join(root, "games", "gta", "los-santos", ".env"))).resolves.toBeTruthy();
     await expect(fs.stat(path.join(root, "games", "gta", "los-santos", "docker-compose.yml"))).resolves.toBeTruthy();
 
@@ -63,6 +65,32 @@ describe("game-aware instance store", () => {
 
     await expect(createInstance({ name: "Second City", game: "gta" })).rejects.toThrow(
       "GTA 5 is managed as a single Los Santos server",
+    );
+  });
+
+  it("repairs legacy GTA descriptors with the FXServer Docker image", async () => {
+    const { getInstance } = await loadStore();
+    const dir = path.join(root, "games", "gta", "los-santos");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      path.join(dir, "server.yml"),
+      [
+        "id: los-santos",
+        "name: Los Santos",
+        "game: gta",
+        "docker:",
+        "  containerName: gta-los-santos",
+        "  network: slutvival-net",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const instance = await getInstance("los-santos");
+
+    expect(instance?.docker.image).toBe("slutvival/fxserver-base:bookworm");
+    await expect(fs.readFile(path.join(dir, ".env"), "utf8")).resolves.toContain(
+      "FXSERVER_IMAGE=slutvival/fxserver-base:bookworm",
     );
   });
 

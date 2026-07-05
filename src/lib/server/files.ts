@@ -1,14 +1,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { instanceDataPath } from "./config";
+import { getInstance } from "./store";
 import type { FileContent, FileNode } from "@/lib/types";
 
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const EXCLUDED_SEGMENTS = new Set(["assets", "notes", "readme.md", "server.yml"]);
 
 /** Root of the file manager for an instance (the Vintage Story data path). */
-function baseDir(serverId: string): string {
-  return instanceDataPath(serverId);
+async function baseDir(serverId: string): Promise<string> {
+  const instance = await getInstance(serverId);
+  return instance?.dataPath ?? instanceDataPath(serverId);
 }
 
 function normalizeRel(rel: string): string {
@@ -29,8 +31,8 @@ function isExcludedPath(rel: string): boolean {
 }
 
 /** Resolve a client-supplied relative path safely inside the Vintage data dir. */
-function resolveSafe(serverId: string, rel: string): string {
-  const base = baseDir(serverId);
+async function resolveSafe(serverId: string, rel: string): Promise<{ abs: string; base: string }> {
+  const base = await baseDir(serverId);
   const clean = normalizeRel(rel);
   if (isExcludedPath(clean)) {
     throw new Error("Path is hidden from the file manager");
@@ -40,11 +42,11 @@ function resolveSafe(serverId: string, rel: string): string {
   if (rl.startsWith("..") || path.isAbsolute(rl)) {
     throw new Error("Path escapes Vintage Story data directory");
   }
-  return abs;
+  return { abs, base };
 }
 
-function toRel(serverId: string, abs: string): string {
-  return path.relative(baseDir(serverId), abs).split(path.sep).join("/");
+function toRel(base: string, abs: string): string {
+  return path.relative(base, abs).split(path.sep).join("/");
 }
 
 function modeString(mode: number): string {
@@ -85,7 +87,7 @@ export function languageFor(name: string): string {
 }
 
 export async function listDir(serverId: string, rel = ""): Promise<FileNode[]> {
-  const abs = resolveSafe(serverId, rel);
+  const { abs, base } = await resolveSafe(serverId, rel);
   const entries = await fs.readdir(abs, { withFileTypes: true });
   const nodes: FileNode[] = [];
   for (const e of entries) {
@@ -95,7 +97,7 @@ export async function listDir(serverId: string, rel = ""): Promise<FileNode[]> {
       const st = await fs.stat(childAbs);
       nodes.push({
         name: e.name,
-        path: toRel(serverId, childAbs),
+        path: toRel(base, childAbs),
         type: e.isDirectory() ? "dir" : "file",
         size: st.size,
         modified: st.mtimeMs,
@@ -116,22 +118,22 @@ export async function readFile(
   serverId: string,
   rel: string,
 ): Promise<FileContent> {
-  const abs = resolveSafe(serverId, rel);
+  const { abs, base } = await resolveSafe(serverId, rel);
   const st = await fs.stat(abs);
-  const base = {
-    path: toRel(serverId, abs),
+  const metadata = {
+    path: toRel(base, abs),
     language: languageFor(rel),
     size: st.size,
     modified: st.mtimeMs,
   };
   if (st.size > MAX_TEXT_BYTES) {
-    return { ...base, content: "", truncated: true };
+    return { ...metadata, content: "", truncated: true };
   }
   const buf = await fs.readFile(abs);
   if (buf.includes(0)) {
-    return { ...base, content: "", binary: true };
+    return { ...metadata, content: "", binary: true };
   }
-  return { ...base, content: buf.toString("utf8") };
+  return { ...metadata, content: buf.toString("utf8") };
 }
 
 export async function writeFile(
@@ -139,7 +141,7 @@ export async function writeFile(
   rel: string,
   content: string,
 ): Promise<FileContent> {
-  const abs = resolveSafe(serverId, rel);
+  const { abs } = await resolveSafe(serverId, rel);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, content, "utf8");
   return readFile(serverId, rel);
@@ -150,18 +152,18 @@ export async function writeBuffer(
   rel: string,
   data: Buffer,
 ): Promise<void> {
-  const abs = resolveSafe(serverId, rel);
+  const { abs } = await resolveSafe(serverId, rel);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, data);
 }
 
 export async function mkdirp(serverId: string, rel: string): Promise<void> {
-  const abs = resolveSafe(serverId, rel);
+  const { abs } = await resolveSafe(serverId, rel);
   await fs.mkdir(abs, { recursive: true });
 }
 
 export async function createFile(serverId: string, rel: string): Promise<void> {
-  const abs = resolveSafe(serverId, rel);
+  const { abs } = await resolveSafe(serverId, rel);
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.writeFile(abs, "", { flag: "wx" }).catch((e) => {
     if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
@@ -173,19 +175,19 @@ export async function rename(
   from: string,
   to: string,
 ): Promise<void> {
-  const absFrom = resolveSafe(serverId, from);
-  const absTo = resolveSafe(serverId, to);
+  const { abs: absFrom } = await resolveSafe(serverId, from);
+  const { abs: absTo } = await resolveSafe(serverId, to);
   await fs.mkdir(path.dirname(absTo), { recursive: true });
   await fs.rename(absFrom, absTo);
 }
 
 export async function remove(serverId: string, rel: string): Promise<void> {
-  const abs = resolveSafe(serverId, rel);
-  if (abs === baseDir(serverId)) throw new Error("Refusing to delete root");
+  const { abs, base } = await resolveSafe(serverId, rel);
+  if (abs === base) throw new Error("Refusing to delete root");
   await fs.rm(abs, { recursive: true, force: true });
 }
 
 export async function statFile(serverId: string, rel: string) {
-  const abs = resolveSafe(serverId, rel);
+  const { abs } = await resolveSafe(serverId, rel);
   return { abs, stat: await fs.stat(abs) };
 }

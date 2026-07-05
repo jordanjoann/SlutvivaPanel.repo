@@ -31,6 +31,33 @@ function instance(engine: "stratum" | "vanilla"): Instance {
   };
 }
 
+function gtaInstance(): Instance {
+  return {
+    id: "los-santos",
+    name: "Los Santos",
+    game: "gta",
+    development: false,
+    version: "recommended",
+    port: 30120,
+    dataPath: "/opt/slutvival/games/gta/los-santos/server-data",
+    runtime: "docker",
+    serverEngine: "fxserver",
+    docker: {
+      containerName: "gta-los-santos",
+      image: "slutvival/fxserver-base:bookworm",
+      network: "slutvival-net",
+    },
+    resources: { memoryLimitMB: 4096, cpuLimit: 2 },
+    maxPlayers: 48,
+    passwordProtected: false,
+    publicAdvertised: false,
+    autoRestart: false,
+    autoBackup: false,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
+
 describe("provisioning engine support", () => {
   it("uses the Stratum executable for Stratum instances", () => {
     expect(dockerCommand(instance("stratum"))).toEqual(["./StratumServer", "--dataPath", "/data"]);
@@ -63,5 +90,33 @@ describe("provisioning engine support", () => {
 
   it("uses a read-write server volume for Stratum compose files", () => {
     expect(dockerCompose(instance("stratum"))).toContain("      - ./server:/server:rw");
+  });
+
+  it("uses the FXServer command for the GTA 5 singleton", () => {
+    expect(dockerCommand(gtaInstance())).toEqual(["bash", "/server/run.sh", "+exec", "server.cfg"]);
+  });
+
+  it("mounts GTA server artifacts read-only and server-data read-write", () => {
+    expect(dockerMounts(gtaInstance())).toEqual([
+      "/opt/slutvival/games/gta/los-santos/server:/server:ro",
+      "/opt/slutvival/games/gta/los-santos/server-data:/server-data:rw",
+    ]);
+  });
+
+  it("generates GTA compose without txAdmin exposure by default", () => {
+    const compose = dockerCompose(gtaInstance());
+    expect(compose).toContain("image: slutvival/fxserver-base:bookworm");
+    expect(compose).toContain("container_name: gta-los-santos");
+    expect(compose).toContain('command: ["bash","/server/run.sh","+exec","server.cfg"]');
+    expect(compose).toContain('"30120:30120/tcp"');
+    expect(compose).toContain('"30120:30120/udp"');
+    expect(compose).not.toContain("40120");
+    expect(compose).toContain("      - ./server:/server:ro");
+    expect(compose).toContain("      - ./server-data:/server-data:rw");
+    expect(compose).toContain('      slutvival.panel.game: "gta"');
+  });
+
+  it("uses FXServer install markers for GTA", () => {
+    expect(serverInstallMarkerValue(gtaInstance())).toBe("fxserver:recommended");
   });
 });
