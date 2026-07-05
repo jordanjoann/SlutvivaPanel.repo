@@ -7,7 +7,6 @@ import {
   LocateFixedIcon,
   MapIcon,
   MinusIcon,
-  MoveIcon,
   PlusIcon,
   RotateCcwIcon,
 } from "lucide-react";
@@ -36,7 +35,7 @@ const surfaceGridStyle = {
   backgroundSize: "44px 44px",
 } satisfies React.CSSProperties;
 const mapBackgroundImage =
-  "radial-gradient(circle at center, color-mix(in oklch, var(--primary) 16%, transparent), transparent 33%), linear-gradient(135deg, color-mix(in oklch, var(--muted) 75%, transparent), var(--background))";
+  "linear-gradient(135deg, color-mix(in oklch, var(--muted) 78%, transparent), var(--background)), linear-gradient(45deg, transparent 0 48%, color-mix(in oklch, var(--primary) 10%, transparent) 48% 52%, transparent 52% 100%)";
 const mapGridImage =
   "repeating-linear-gradient(0deg, transparent, transparent 31px, color-mix(in oklch, var(--primary) 16%, transparent) 32px), repeating-linear-gradient(90deg, transparent, transparent 31px, color-mix(in oklch, var(--primary) 16%, transparent) 32px)";
 
@@ -172,11 +171,6 @@ export default function GtaMapPage() {
               </div>
             </div>
 
-            <div className="absolute left-3 top-3 flex items-center gap-2 rounded-lg border border-border bg-background/90 px-2.5 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur">
-              <MoveIcon className="size-3.5" />
-              Pan and zoom
-            </div>
-
             <div className="absolute right-3 top-3 flex flex-col gap-2">
               <Badge variant="default">{onlineCount} online</Badge>
               <div className="flex rounded-lg border border-border bg-background/90 p-1 shadow-sm backdrop-blur">
@@ -291,7 +285,7 @@ function PlayerDetails({ player }: { player: GtaMappedPlayer | null }) {
         </div>
       ) : (
         <div className="flex h-full min-h-44 items-center justify-center rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-          Select a marker to inspect player telemetry.
+          No player selected.
         </div>
       )}
     </aside>
@@ -308,7 +302,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function formatHeading(value: number | undefined): string {
-  return value === undefined ? "Unknown" : `${Math.round(value)} deg`;
+  return value === undefined || !Number.isFinite(value) ? "Unknown" : `${Math.round(value)} deg`;
 }
 
 function clampZoom(value: number): number {
