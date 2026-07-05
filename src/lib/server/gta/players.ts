@@ -13,6 +13,7 @@ import type {
   GtaPunishment,
   Instance,
 } from "@/lib/types";
+import { readGtaBridgeToken } from "./server-data";
 
 type StoredGtaPlayer = {
   id: string;
@@ -297,6 +298,78 @@ export async function findActiveGtaBan(
   identifiers: GtaPlayerIdentifier[],
 ): Promise<GtaPunishment | null> {
   return withStoreLock(inst, () => findActiveGtaBanUnlocked(inst, identifiers));
+}
+
+export async function handleGtaBridgeEvent(
+  inst: Instance,
+  body: unknown,
+): Promise<{ ok: true } | { allowed: boolean; reason?: string }> {
+  if (!isPlainRecord(body)) {
+    throw malformedBridgePayload("body must be an object");
+  }
+
+  const expectedToken = await readGtaBridgeToken(inst);
+  if (
+    !expectedToken ||
+    typeof body.serverToken !== "string" ||
+    body.serverToken !== expectedToken
+  ) {
+    throw new Error("Invalid GTA bridge token");
+  }
+
+  switch (body.type) {
+    case "heartbeat": {
+      if (
+        !Array.isArray(body.players) ||
+        !body.players.every(isGtaBridgePlayer)
+      ) {
+        throw malformedBridgePayload("heartbeat players are required");
+      }
+      await recordGtaHeartbeat(inst, body.players);
+      return { ok: true };
+    }
+
+    case "playerJoin": {
+      if (!isGtaBridgePlayer(body.player)) {
+        throw malformedBridgePayload("playerJoin player is required");
+      }
+      await recordGtaPlayerJoin(inst, body.player);
+      return { ok: true };
+    }
+
+    case "playerDrop": {
+      const playerId = body.playerId;
+      const serverId = body.serverId;
+      const reason = body.reason;
+      if (
+        (playerId !== undefined && typeof playerId !== "string") ||
+        (serverId !== undefined && !isFiniteNumber(serverId)) ||
+        (reason !== undefined && typeof reason !== "string") ||
+        (typeof playerId !== "string" && !isFiniteNumber(serverId))
+      ) {
+        throw malformedBridgePayload("playerDrop playerId or serverId is required");
+      }
+      await recordGtaPlayerDrop(inst, { playerId, serverId, reason });
+      return { ok: true };
+    }
+
+    case "banCheck": {
+      if (
+        !Array.isArray(body.identifiers) ||
+        !body.identifiers.every(isGtaPlayerIdentifier) ||
+        (body.player !== undefined && !isGtaBridgePlayer(body.player))
+      ) {
+        throw malformedBridgePayload("banCheck identifiers are required");
+      }
+      const ban = await findActiveGtaBan(inst, body.identifiers);
+      return ban
+        ? { allowed: false, reason: ban.reason }
+        : { allowed: true };
+    }
+
+    default:
+      throw new Error("Unknown GTA bridge event type");
+  }
 }
 
 async function findActiveGtaBanUnlocked(
@@ -983,6 +1056,17 @@ function isGtaPlayerIdentifier(value: unknown): value is GtaPlayerIdentifier {
   );
 }
 
+function isGtaBridgePlayer(value: unknown): value is GtaBridgePlayer {
+  if (!isRecord(value)) return false;
+  return (
+    isFiniteNumber(value.serverId) &&
+    typeof value.name === "string" &&
+    isFiniteNumber(value.pingMs) &&
+    Array.isArray(value.identifiers) &&
+    value.identifiers.every(isGtaPlayerIdentifier)
+  );
+}
+
 function isGtaBridgeState(value: unknown): value is GtaBridgeState {
   if (!isRecord(value)) return false;
   return (
@@ -1016,4 +1100,12 @@ function isNotFoundError(error: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && !Array.isArray(value);
+}
+
+function malformedBridgePayload(detail: string): Error {
+  return new Error(`Malformed GTA bridge payload: ${detail}`);
 }

@@ -12,6 +12,7 @@ import {
   buildGtaKickCommand,
   buildGtaPlayerId,
   findActiveGtaBan,
+  handleGtaBridgeEvent,
   listGtaPlayers,
   recordGtaHeartbeat,
   recordGtaPlayerAction,
@@ -66,6 +67,15 @@ function bridgePlayer(
 
 function expectedPlayerId(stableKey: string): string {
   return `gta_${crypto.createHash("sha256").update(stableKey).digest("hex").slice(0, 20)}`;
+}
+
+async function writeBridgeToken(inst: Instance, token: string) {
+  await fs.mkdir(inst.dataPath, { recursive: true });
+  await fs.writeFile(
+    path.join(inst.dataPath, "server.secret.cfg"),
+    `set slutvival_bridge_token "${token}"\n`,
+    "utf8",
+  );
 }
 
 beforeEach(async () => {
@@ -1215,6 +1225,114 @@ describe("GTA players", () => {
 
     expect(steamBan?.reason).toBe("Steam ban");
     expect(ipOnlyBan).toBeNull();
+  });
+
+  it("handles generated Lua bridge payloads", async () => {
+    const inst = instance();
+    const token = "a".repeat(48);
+    const player = bridgePlayer();
+    await writeBridgeToken(inst, token);
+
+    await expect(
+      handleGtaBridgeEvent(inst, {
+        type: "heartbeat",
+        serverToken: token,
+        resource: "slutvival-admin",
+        players: [player],
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    let roster = await listGtaPlayers(inst);
+    expect(roster.players[0]).toMatchObject({
+      id: buildGtaPlayerId(player),
+      name: "Bocephus",
+      online: true,
+      serverId: 7,
+    });
+
+    await expect(
+      handleGtaBridgeEvent(inst, {
+        type: "playerDrop",
+        serverToken: token,
+        serverId: 7,
+        reason: "Quit",
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    roster = await listGtaPlayers(inst);
+    expect(roster.players[0]).toMatchObject({ online: false });
+    expect(roster.players[0].sessions[0]).toMatchObject({
+      serverId: 7,
+      dropReason: "Quit",
+    });
+
+    await expect(
+      handleGtaBridgeEvent(inst, {
+        type: "banCheck",
+        serverToken: token,
+        identifiers: player.identifiers,
+        player,
+      }),
+    ).resolves.toEqual({ allowed: true });
+
+    await recordGtaPlayerAction(
+      inst,
+      {
+        action: "ban",
+        playerId: buildGtaPlayerId(player),
+        reason: "No re-entry",
+      },
+      { id: "u_owner", username: "Owner" },
+    );
+
+    await expect(
+      handleGtaBridgeEvent(inst, {
+        type: "banCheck",
+        serverToken: token,
+        identifiers: player.identifiers,
+        player,
+      }),
+    ).resolves.toEqual({ allowed: false, reason: "No re-entry" });
+
+    await expect(
+      handleGtaBridgeEvent(inst, {
+        type: "playerJoin",
+        serverToken: token,
+        player,
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it("rejects malformed bridge players before writing state", async () => {
+    const inst = instance();
+    const token = "b".repeat(48);
+    await writeBridgeToken(inst, token);
+
+    await expect(
+      handleGtaBridgeEvent(inst, {
+        type: "heartbeat",
+        serverToken: token,
+        players: [{ ...bridgePlayer(), serverId: "7" }],
+      }),
+    ).rejects.toThrow(/malformed/i);
+
+    await expect(listGtaPlayers(inst)).resolves.toMatchObject({
+      players: [],
+      onlineCount: 0,
+    });
+  });
+
+  it("rejects bridge events with a missing or mismatched token", async () => {
+    const inst = instance();
+    await writeBridgeToken(inst, "c".repeat(48));
+
+    await expect(
+      handleGtaBridgeEvent(inst, {
+        type: "heartbeat",
+        serverToken: "d".repeat(48),
+        players: [],
+      }),
+    ).rejects.toThrow("Invalid GTA bridge token");
   });
 
   it("rejects kicking an offline player", async () => {
