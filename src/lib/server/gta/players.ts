@@ -93,11 +93,16 @@ async function recordGtaHeartbeatUnlocked(
   store.bridge.lastHeartbeatAt = now;
   closeStaleSessions(store, now);
   let punishmentsChanged = false;
+  const seenPlayerIds = new Set<string>();
   for (const player of players) {
     const result = upsertBridgePlayer(store, player, now);
     punishmentsChanged ||= result.punishmentsChanged;
+    for (const id of playerIdsForAssociations(result.player)) {
+      seenPlayerIds.add(id);
+    }
     ensureOpenSession(store.sessions, result.player, now);
   }
+  closeMissingHeartbeatPlayers(store, seenPlayerIds, now);
   await writeJsonFile(playersFile(inst), store.players);
   await writeJsonFile(sessionsFile(inst), store.sessions);
   await writeJsonFile(bridgeFile(inst), store.bridge);
@@ -551,6 +556,39 @@ function closeStaleSessions(store: GtaPlayerStore, now: number): boolean {
     changed = true;
   }
   return changed;
+}
+
+function closeMissingHeartbeatPlayers(
+  store: GtaPlayerStore,
+  seenPlayerIds: Set<string>,
+  now: number,
+): void {
+  for (const player of store.players) {
+    if (!isOnline(player, now)) continue;
+    if (playerIdsForAssociations(player).some((id) => seenPlayerIds.has(id))) {
+      continue;
+    }
+
+    for (const session of store.sessions) {
+      if (
+        !sessionBelongsToPlayer(session, player) ||
+        session.leftAt !== undefined
+      ) {
+        continue;
+      }
+      normalizeSessionPlayerId(session, player);
+      session.leftAt = now;
+      session.durationSeconds = Math.max(
+        0,
+        Math.floor((now - session.joinedAt) / 1000),
+      );
+      session.dropReason = "Heartbeat missing";
+    }
+    player.online = false;
+    player.lastSeenAt = now;
+    delete player.serverId;
+    delete player.pingMs;
+  }
 }
 
 function playersPayload(store: GtaPlayerStore, now: number): GtaPlayersPayload {

@@ -598,6 +598,54 @@ describe("GTA players", () => {
     });
   });
 
+  it("closes online players missing from heartbeat before a reused server id can be targeted", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const playerA = bridgePlayer({
+      serverId: 7,
+      name: "Player A",
+      identifiers: [{ type: "license", value: "license:a" }],
+    });
+    const playerB = bridgePlayer({
+      serverId: 7,
+      name: "Player B",
+      identifiers: [{ type: "license", value: "license:b" }],
+    });
+
+    const joinedA = await recordGtaPlayerJoin(inst, playerA, now);
+    await recordGtaHeartbeat(inst, [playerB], now + 1_000);
+
+    const roster = await listGtaPlayers(inst, now + 1_001);
+    const stalePlayer = roster.players.find(
+      (player) => player.name === "Player A",
+    );
+    const currentPlayer = roster.players.find(
+      (player) => player.name === "Player B",
+    );
+
+    expect(currentPlayer).toMatchObject({
+      online: true,
+      serverId: 7,
+    });
+    expect(stalePlayer).toMatchObject({
+      online: false,
+    });
+    expect(stalePlayer?.sessions[0]).toMatchObject({
+      leftAt: now + 1_000,
+      durationSeconds: 1,
+      dropReason: "Heartbeat missing",
+    });
+
+    await expect(
+      recordGtaPlayerAction(
+        inst,
+        { action: "kick", playerId: joinedA.player.id, reason: "Stale kick" },
+        { id: "u_owner", username: "Owner" },
+        now + 2_000,
+      ),
+    ).rejects.toThrow(/online player/i);
+  });
+
   it("ignores stale drops for an old server id after the player rejoins", async () => {
     const inst = instance();
     const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
