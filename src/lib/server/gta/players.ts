@@ -130,6 +130,7 @@ async function recordGtaPlayerJoinUnlocked(
   const store = await readStore(inst);
   closeStaleSessions(store, now);
   const result = upsertBridgePlayer(store, player, now);
+  closeOnlinePlayersReusingServerId(store, result.player, player.serverId, now);
   ensureOpenSession(store.sessions, result.player, now);
   await writeJsonFile(playersFile(inst), store.players);
   await writeJsonFile(sessionsFile(inst), store.sessions);
@@ -591,6 +592,43 @@ function closeMissingHeartbeatPlayers(
   }
 }
 
+function closeOnlinePlayersReusingServerId(
+  store: GtaPlayerStore,
+  incoming: StoredGtaPlayer,
+  serverId: number,
+  now: number,
+): void {
+  const incomingIds = new Set(playerIdsForAssociations(incoming));
+  for (const player of store.players) {
+    if (player === incoming) continue;
+    if (player.serverId !== serverId) continue;
+    if (!isOnline(player, now)) continue;
+    if (playerIdsForAssociations(player).some((id) => incomingIds.has(id))) {
+      continue;
+    }
+
+    for (const session of store.sessions) {
+      if (
+        !sessionBelongsToPlayer(session, player) ||
+        session.leftAt !== undefined
+      ) {
+        continue;
+      }
+      normalizeSessionPlayerId(session, player);
+      session.leftAt = now;
+      session.durationSeconds = Math.max(
+        0,
+        Math.floor((now - session.joinedAt) / 1000),
+      );
+      session.dropReason = "Server id reused";
+    }
+    player.online = false;
+    player.lastSeenAt = now;
+    delete player.serverId;
+    delete player.pingMs;
+  }
+}
+
 function playersPayload(store: GtaPlayerStore, now: number): GtaPlayersPayload {
   const players = store.players
     .map((player) =>
@@ -856,10 +894,13 @@ function isStoredGtaPlayer(value: unknown): value is StoredGtaPlayer {
         value.aliases.every((alias) => typeof alias === "string"))) &&
     typeof value.name === "string" &&
     typeof value.online === "boolean" &&
+    isOptionalFiniteNumber(value.serverId) &&
+    isOptionalFiniteNumber(value.pingMs) &&
     Array.isArray(value.identifiers) &&
     value.identifiers.every(isGtaPlayerIdentifier) &&
-    typeof value.firstSeenAt === "number" &&
-    typeof value.lastSeenAt === "number"
+    isFiniteNumber(value.firstSeenAt) &&
+    isFiniteNumber(value.lastSeenAt) &&
+    isOptionalFiniteNumber(value.lastHeartbeatAt)
   );
 }
 
@@ -869,7 +910,11 @@ function isGtaPlayerSession(value: unknown): value is GtaPlayerSession {
     typeof value.id === "string" &&
     typeof value.playerId === "string" &&
     typeof value.name === "string" &&
-    typeof value.joinedAt === "number"
+    isOptionalFiniteNumber(value.serverId) &&
+    isFiniteNumber(value.joinedAt) &&
+    isOptionalFiniteNumber(value.leftAt) &&
+    isOptionalFiniteNumber(value.durationSeconds) &&
+    isOptionalString(value.dropReason)
   );
 }
 
@@ -882,7 +927,9 @@ function isGtaPunishment(value: unknown): value is GtaPunishment {
     (value.type === "kick" || value.type === "warn" || value.type === "ban") &&
     typeof value.reason === "string" &&
     typeof value.active === "boolean" &&
-    typeof value.createdAt === "number"
+    isFiniteNumber(value.createdAt) &&
+    isOptionalFiniteNumber(value.revokedAt) &&
+    (value.actor === undefined || isGtaPunishmentActor(value.actor))
   );
 }
 
@@ -908,9 +955,28 @@ function isGtaPlayerIdentifier(value: unknown): value is GtaPlayerIdentifier {
 function isGtaBridgeState(value: unknown): value is GtaBridgeState {
   if (!isRecord(value)) return false;
   return (
-    value.lastHeartbeatAt === undefined ||
-    typeof value.lastHeartbeatAt === "number"
+    value.lastHeartbeatAt === undefined || isFiniteNumber(value.lastHeartbeatAt)
   );
+}
+
+function isGtaPunishmentActor(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.username === "string"
+  );
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
+}
+
+function isOptionalFiniteNumber(value: unknown): boolean {
+  return value === undefined || isFiniteNumber(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isNotFoundError(error: unknown): boolean {

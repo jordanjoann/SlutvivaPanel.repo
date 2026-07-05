@@ -646,6 +646,54 @@ describe("GTA players", () => {
     ).rejects.toThrow(/online player/i);
   });
 
+  it("closes a different durable player when join reuses an online server id", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const playerA = bridgePlayer({
+      serverId: 7,
+      name: "Join A",
+      identifiers: [{ type: "license", value: "license:join-a" }],
+    });
+    const playerB = bridgePlayer({
+      serverId: 7,
+      name: "Join B",
+      identifiers: [{ type: "license", value: "license:join-b" }],
+    });
+
+    const joinedA = await recordGtaPlayerJoin(inst, playerA, now);
+    await recordGtaPlayerJoin(inst, playerB, now + 1_000);
+
+    const roster = await listGtaPlayers(inst, now + 1_001);
+    const stalePlayer = roster.players.find(
+      (player) => player.name === "Join A",
+    );
+    const currentPlayer = roster.players.find(
+      (player) => player.name === "Join B",
+    );
+
+    expect(currentPlayer).toMatchObject({
+      online: true,
+      serverId: 7,
+    });
+    expect(stalePlayer).toMatchObject({
+      online: false,
+    });
+    expect(stalePlayer?.sessions[0]).toMatchObject({
+      leftAt: now + 1_000,
+      durationSeconds: 1,
+      dropReason: "Server id reused",
+    });
+
+    await expect(
+      recordGtaPlayerAction(
+        inst,
+        { action: "kick", playerId: joinedA.player.id, reason: "Stale kick" },
+        { id: "u_owner", username: "Owner" },
+        now + 2_000,
+      ),
+    ).rejects.toThrow(/online player/i);
+  });
+
   it("ignores stale drops for an old server id after the player rejoins", async () => {
     const inst = instance();
     const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
@@ -871,6 +919,84 @@ describe("GTA players", () => {
     ).rejects.toThrow();
     await expect(fs.readFile(punishmentsFile, "utf8")).resolves.toBe(
       corruptContent,
+    );
+  });
+
+  it("rejects persisted records with malformed optional fields", async () => {
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+
+    async function writeStorageFile(
+      inst: Instance,
+      fileName: string,
+      value: unknown,
+    ) {
+      const dir = path.join(inst.dataPath, "slutvival");
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(
+        path.join(dir, fileName),
+        `${JSON.stringify(value, null, 2)}\n`,
+        "utf8",
+      );
+    }
+
+    const badPlayerInst: Instance = {
+      ...instance(),
+      id: "bad-player",
+      dataPath: path.join(root, "bad-player-data"),
+    };
+    await writeStorageFile(badPlayerInst, "players.json", [
+      {
+        id: "gta_bad_player",
+        name: "Bad Player",
+        online: true,
+        identifiers: [],
+        firstSeenAt: now,
+        lastSeenAt: now,
+        lastHeartbeatAt: "bad",
+      },
+    ]);
+    await expect(listGtaPlayers(badPlayerInst, now)).rejects.toThrow(
+      /invalid record/i,
+    );
+
+    const badSessionInst: Instance = {
+      ...instance(),
+      id: "bad-session",
+      dataPath: path.join(root, "bad-session-data"),
+    };
+    await writeStorageFile(badSessionInst, "sessions.json", [
+      {
+        id: "gta_session_bad",
+        playerId: "gta_bad_player",
+        name: "Bad Player",
+        joinedAt: now,
+        leftAt: "bad",
+      },
+    ]);
+    await expect(listGtaPlayers(badSessionInst, now)).rejects.toThrow(
+      /invalid record/i,
+    );
+
+    const badPunishmentInst: Instance = {
+      ...instance(),
+      id: "bad-punishment",
+      dataPath: path.join(root, "bad-punishment-data"),
+    };
+    await writeStorageFile(badPunishmentInst, "punishments.json", [
+      {
+        id: "gta_punishment_bad",
+        playerId: "gta_bad_player",
+        playerName: "Bad Player",
+        type: "warn",
+        reason: "Bad optional fields",
+        active: false,
+        createdAt: now,
+        revokedAt: "bad",
+        actor: { id: 123, username: "Owner" },
+      },
+    ]);
+    await expect(listGtaPlayers(badPunishmentInst, now)).rejects.toThrow(
+      /invalid record/i,
     );
   });
 
