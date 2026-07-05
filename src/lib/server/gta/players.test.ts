@@ -262,6 +262,103 @@ describe("GTA players", () => {
     expect(steamBan?.reason).toBe("Partial ban");
   });
 
+  it("normalizes alias-backed open sessions during timeout, drop, and rejoin", async () => {
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const steamOnly = bridgePlayer({
+      serverId: 7,
+      identifiers: [{ type: "steam", value: "steam:alias-session" }],
+    });
+    const licenseAndSteam = bridgePlayer({
+      serverId: 7,
+      identifiers: [
+        { type: "license", value: "license:alias-session" },
+        { type: "steam", value: "steam:alias-session" },
+      ],
+    });
+    const oldId = buildGtaPlayerId(steamOnly);
+    const canonicalId = buildGtaPlayerId(licenseAndSteam);
+
+    async function seedPartialMigration(inst: Instance) {
+      const joined = await recordGtaPlayerJoin(inst, steamOnly, now);
+      expect(joined.player.id).toBe(oldId);
+
+      const playersFile = path.join(inst.dataPath, "slutvival", "players.json");
+      const players = JSON.parse(await fs.readFile(playersFile, "utf8"));
+      players[0] = {
+        ...players[0],
+        id: canonicalId,
+        aliases: [oldId],
+        identifiers: licenseAndSteam.identifiers,
+      };
+      await fs.writeFile(playersFile, `${JSON.stringify(players, null, 2)}\n`);
+    }
+
+    const timeoutInst: Instance = {
+      ...instance(),
+      id: "alias-timeout",
+      dataPath: path.join(root, "timeout-data"),
+    };
+    await seedPartialMigration(timeoutInst);
+
+    const timedOut = await listGtaPlayers(timeoutInst, now + 31_000);
+    expect(timedOut.players[0].online).toBe(false);
+    expect(timedOut.players[0].sessions).toHaveLength(1);
+    expect(timedOut.players[0].sessions[0]).toMatchObject({
+      playerId: canonicalId,
+      leftAt: now,
+      dropReason: "Heartbeat timed out",
+    });
+
+    const lifecycleInst: Instance = {
+      ...instance(),
+      id: "alias-lifecycle",
+      dataPath: path.join(root, "lifecycle-data"),
+    };
+    await seedPartialMigration(lifecycleInst);
+
+    let roster = await recordGtaHeartbeat(
+      lifecycleInst,
+      [licenseAndSteam],
+      now + 1,
+    );
+    let openSessions = roster.players[0].sessions.filter(
+      (session) => session.leftAt === undefined,
+    );
+    expect(roster.players[0].sessions).toHaveLength(1);
+    expect(openSessions).toHaveLength(1);
+    expect(openSessions[0]).toMatchObject({
+      playerId: canonicalId,
+      serverId: 7,
+    });
+
+    await recordGtaPlayerDrop(
+      lifecycleInst,
+      { playerId: oldId, reason: "Quit" },
+      now + 2,
+    );
+    roster = await listGtaPlayers(lifecycleInst, now + 3);
+    expect(roster.players[0].online).toBe(false);
+    expect(roster.players[0].sessions).toHaveLength(1);
+    expect(roster.players[0].sessions[0]).toMatchObject({
+      playerId: canonicalId,
+      leftAt: now + 2,
+      dropReason: "Quit",
+    });
+
+    await recordGtaHeartbeat(lifecycleInst, [licenseAndSteam], now + 10);
+    roster = await listGtaPlayers(lifecycleInst, now + 11);
+    openSessions = roster.players[0].sessions.filter(
+      (session) => session.leftAt === undefined,
+    );
+    expect(roster.players[0].sessions).toHaveLength(2);
+    expect(openSessions).toHaveLength(1);
+    expect(openSessions[0]).toMatchObject({
+      playerId: canonicalId,
+      serverId: 7,
+      joinedAt: now + 10,
+    });
+  });
+
   it("does not downgrade the canonical id when later heartbeats omit a stronger identifier", async () => {
     const inst = instance();
     const now = Date.UTC(2026, 6, 5, 12, 0, 0);

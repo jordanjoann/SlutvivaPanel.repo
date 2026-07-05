@@ -157,9 +157,12 @@ async function recordGtaPlayerDropUnlocked(
   now: number,
 ): Promise<void> {
   const store = await readStore(inst);
+  const inputPlayerId = input.playerId;
   const player =
-    (input.playerId
-      ? store.players.find((candidate) => candidate.id === input.playerId)
+    (inputPlayerId !== undefined
+      ? store.players.find((candidate) =>
+          playerHasAssociatedId(candidate, inputPlayerId),
+        )
       : undefined) ??
     (input.serverId !== undefined
       ? store.players.find((candidate) => candidate.serverId === input.serverId)
@@ -171,7 +174,10 @@ async function recordGtaPlayerDropUnlocked(
   }
 
   const session = store.sessions.find((candidate) => {
-    if (candidate.playerId !== player.id || candidate.leftAt !== undefined) {
+    if (
+      !sessionBelongsToPlayer(candidate, player) ||
+      candidate.leftAt !== undefined
+    ) {
       return false;
     }
     if (input.serverId !== undefined)
@@ -186,6 +192,7 @@ async function recordGtaPlayerDropUnlocked(
   player.lastSeenAt = now;
   delete player.serverId;
   delete player.pingMs;
+  normalizeSessionPlayerId(session, player);
   session.leftAt = now;
   session.durationSeconds = Math.max(
     0,
@@ -454,15 +461,15 @@ function ensureOpenSession(
   player: StoredGtaPlayer,
   now: number,
 ): void {
-  if (
-    sessions.some(
-      (session) =>
-        session.playerId === player.id &&
-        session.leftAt === undefined &&
-        session.serverId === player.serverId,
-    )
-  ) {
-    return;
+  for (const session of sessions) {
+    if (
+      sessionBelongsToPlayer(session, player) &&
+      session.leftAt === undefined &&
+      session.serverId === player.serverId
+    ) {
+      normalizeSessionPlayerId(session, player);
+      return;
+    }
   }
   sessions.push({
     id: buildRecordId(
@@ -484,12 +491,13 @@ function closeOpenSessionsForOtherServer(
 ): void {
   for (const session of sessions) {
     if (
-      session.playerId !== player.id ||
+      !sessionBelongsToPlayer(session, player) ||
       session.leftAt !== undefined ||
       session.serverId === serverId
     ) {
       continue;
     }
+    normalizeSessionPlayerId(session, player);
     session.leftAt = now;
     session.durationSeconds = Math.max(
       0,
@@ -507,8 +515,12 @@ function closeStaleSessions(store: GtaPlayerStore, now: number): boolean {
 
     const leftAt = player.lastHeartbeatAt;
     for (const session of store.sessions) {
-      if (session.playerId !== player.id || session.leftAt !== undefined)
+      if (
+        !sessionBelongsToPlayer(session, player) ||
+        session.leftAt !== undefined
+      )
         continue;
+      normalizeSessionPlayerId(session, player);
       session.leftAt = leftAt;
       session.durationSeconds = Math.max(
         0,
@@ -582,6 +594,26 @@ function playerSummary(
 
 function playerIdsForAssociations(player: StoredGtaPlayer): string[] {
   return [...new Set([player.id, ...(player.aliases ?? [])])];
+}
+
+function playerHasAssociatedId(player: StoredGtaPlayer, id: string): boolean {
+  return playerIdsForAssociations(player).includes(id);
+}
+
+function sessionBelongsToPlayer(
+  session: GtaPlayerSession,
+  player: StoredGtaPlayer,
+): boolean {
+  return playerHasAssociatedId(player, session.playerId);
+}
+
+function normalizeSessionPlayerId(
+  session: GtaPlayerSession,
+  player: StoredGtaPlayer,
+): void {
+  if (sessionBelongsToPlayer(session, player)) {
+    session.playerId = player.id;
+  }
 }
 
 function addPlayerAliases(player: StoredGtaPlayer, ids: string[]): void {
