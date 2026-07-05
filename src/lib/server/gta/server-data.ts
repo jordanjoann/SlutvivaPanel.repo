@@ -61,8 +61,20 @@ local function collectIdentifiers(player)
   return identifiers
 end
 
+local function callNative(native, ...)
+  if type(native) == "function" then
+    local ok, value = pcall(native, ...)
+
+    if ok then
+      return value
+    end
+  end
+
+  return nil
+end
+
 local function safeNumber(value)
-  if type(value) == "number" then
+  if type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge then
     return value
   end
 
@@ -74,16 +86,24 @@ local function collectPosition(ped)
     return nil
   end
 
-  local coords = GetEntityCoords(ped)
+  local coords = callNative(GetEntityCoords, ped)
 
   if not coords then
     return nil
   end
 
+  local x = safeNumber(coords.x)
+  local y = safeNumber(coords.y)
+  local z = safeNumber(coords.z)
+
+  if not x or not y or not z then
+    return nil
+  end
+
   return {
-    x = safeNumber(coords.x),
-    y = safeNumber(coords.y),
-    z = safeNumber(coords.z),
+    x = x,
+    y = y,
+    z = z,
   }
 end
 
@@ -92,23 +112,32 @@ local function collectVehicle(ped)
     return nil
   end
 
-  local vehicle = GetVehiclePedIsIn(ped, false)
+  local vehicle = callNative(GetVehiclePedIsIn, ped, false)
 
-  if not vehicle or vehicle == 0 then
+  if not vehicle then
+    return nil
+  end
+
+  if vehicle == 0 then
     return {
       inVehicle = false,
     }
   end
 
+  local plate = callNative(GetVehicleNumberPlateText, vehicle)
+  if type(plate) ~= "string" then
+    plate = nil
+  end
+
   return {
     inVehicle = true,
-    modelHash = GetEntityModel(vehicle),
-    plate = GetVehicleNumberPlateText(vehicle),
+    modelHash = safeNumber(callNative(GetEntityModel, vehicle)),
+    plate = plate,
   }
 end
 
 local function collectPlayer(player, playerName)
-  local ped = GetPlayerPed(player)
+  local ped = callNative(GetPlayerPed, player)
 
   return {
     serverId = tonumber(player),
@@ -116,9 +145,9 @@ local function collectPlayer(player, playerName)
     pingMs = GetPlayerPing(player),
     identifiers = collectIdentifiers(player),
     position = collectPosition(ped),
-    heading = ped and ped ~= 0 and GetEntityHeading(ped) or nil,
-    health = ped and ped ~= 0 and GetEntityHealth(ped) or nil,
-    armour = ped and ped ~= 0 and GetPedArmour(ped) or nil,
+    heading = safeNumber(ped and ped ~= 0 and callNative(GetEntityHeading, ped) or nil),
+    health = safeNumber(ped and ped ~= 0 and callNative(GetEntityHealth, ped) or nil),
+    armour = safeNumber(ped and ped ~= 0 and callNative(GetPedArmour, ped) or nil),
     vehicle = collectVehicle(ped),
   }
 end

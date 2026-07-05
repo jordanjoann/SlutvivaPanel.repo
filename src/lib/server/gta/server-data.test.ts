@@ -215,6 +215,20 @@ describe("GTA server data", () => {
     expect(lua).toContain("GetVehiclePedIsIn");
     expect(lua).toContain("GetVehicleNumberPlateText");
     expect(lua).toContain("Wait(2000)");
+    expect(lua).toContain('type(native) == "function"');
+    expect(lua).toContain("pcall(native");
+
+    const xCoordinateIndex = lua.indexOf("local x = safeNumber(coords.x)");
+    const yCoordinateIndex = lua.indexOf("local y = safeNumber(coords.y)");
+    const zCoordinateIndex = lua.indexOf("local z = safeNumber(coords.z)");
+    const completePositionGuardIndex = lua.indexOf("if not x or not y or not z then");
+    const positionReturnIndex = lua.indexOf("x = x", completePositionGuardIndex);
+
+    expect(xCoordinateIndex).toBeGreaterThan(-1);
+    expect(yCoordinateIndex).toBeGreaterThan(xCoordinateIndex);
+    expect(zCoordinateIndex).toBeGreaterThan(yCoordinateIndex);
+    expect(completePositionGuardIndex).toBeGreaterThan(zCoordinateIndex);
+    expect(positionReturnIndex).toBeGreaterThan(completePositionGuardIndex);
   });
 
   it("does not replace an existing bridge token", async () => {

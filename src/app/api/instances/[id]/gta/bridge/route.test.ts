@@ -111,7 +111,7 @@ describe("GTA bridge route", () => {
 
   it("returns 400 for malformed telemetry rejected by the service", async () => {
     handleGtaBridgeEvent.mockRejectedValueOnce(
-      new Error("Malformed GTA bridge payload: heartbeat players are required"),
+      new Error("Malformed GTA bridge payload: heartbeat player position is invalid"),
     );
     const { POST } = await import("./route");
 
@@ -119,14 +119,22 @@ describe("GTA bridge route", () => {
       bridgeRequest({
         type: "heartbeat",
         serverToken: "token",
-        players: [{ position: { x: "bad", y: 0, z: 0 } }],
+        players: [
+          {
+            serverId: 7,
+            name: "Bocephus",
+            pingMs: 44,
+            identifiers: [{ type: "license", value: "license:abc123" }],
+            position: { x: "bad", y: 0, z: 0 },
+          },
+        ],
       }),
       params(),
     );
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
-      error: "Malformed GTA bridge payload: heartbeat players are required",
+      error: "Malformed GTA bridge payload: heartbeat player position is invalid",
     });
   });
 });
