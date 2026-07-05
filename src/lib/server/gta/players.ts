@@ -230,7 +230,10 @@ async function recordGtaPlayerActionUnlocked(
   }
 
   const punishment: GtaPunishment = {
-    id: buildRecordId("gta_punishment", `${player.id}:${input.action}:${now}`),
+    id: buildRecordId(
+      "gta_punishment",
+      `${player.id}:${input.action}:${now}:${crypto.randomUUID()}`,
+    ),
     playerId: player.id,
     playerName: player.name,
     type: input.action,
@@ -388,6 +391,12 @@ function upsertBridgePlayer(
       (player) => player === current || !matchingPlayers.includes(player),
     );
     const punishmentsChanged = migrateRelatedPlayerIds(store, oldIds, id);
+    closeOpenSessionsForOtherServer(
+      store.sessions,
+      current,
+      bridgePlayer.serverId,
+      now,
+    );
     current.name = bridgePlayer.name;
     current.online = true;
     current.serverId = bridgePlayer.serverId;
@@ -444,7 +453,9 @@ function ensureOpenSession(
   if (
     sessions.some(
       (session) =>
-        session.playerId === player.id && session.leftAt === undefined,
+        session.playerId === player.id &&
+        session.leftAt === undefined &&
+        session.serverId === player.serverId,
     )
   ) {
     return;
@@ -456,6 +467,29 @@ function ensureOpenSession(
     serverId: player.serverId,
     joinedAt: now,
   });
+}
+
+function closeOpenSessionsForOtherServer(
+  sessions: GtaPlayerSession[],
+  player: StoredGtaPlayer,
+  serverId: number,
+  now: number,
+): void {
+  for (const session of sessions) {
+    if (
+      session.playerId !== player.id ||
+      session.leftAt !== undefined ||
+      session.serverId === serverId
+    ) {
+      continue;
+    }
+    session.leftAt = now;
+    session.durationSeconds = Math.max(
+      0,
+      Math.floor((now - session.joinedAt) / 1000),
+    );
+    session.dropReason = "Reconnected";
+  }
 }
 
 function closeStaleSessions(store: GtaPlayerStore, now: number): boolean {

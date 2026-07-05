@@ -447,6 +447,52 @@ describe("GTA players", () => {
     expect(roster.players[0].sessions[1].leftAt).toBeUndefined();
   });
 
+  it("starts a new current session when the same durable player changes server id", async () => {
+    const inst = instance();
+    const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const rejoinedAt = joinedAt + 5_000;
+    const droppedAt = rejoinedAt + 1_000;
+
+    await recordGtaPlayerJoin(inst, bridgePlayer({ serverId: 7 }), joinedAt);
+    await recordGtaHeartbeat(
+      inst,
+      [bridgePlayer({ serverId: 12 })],
+      rejoinedAt,
+    );
+
+    let roster = await listGtaPlayers(inst, rejoinedAt + 1);
+
+    expect(roster.players[0]).toMatchObject({
+      online: true,
+      serverId: 12,
+    });
+    expect(roster.players[0].sessions).toHaveLength(2);
+    expect(roster.players[0].sessions[0]).toMatchObject({
+      serverId: 7,
+      leftAt: rejoinedAt,
+      durationSeconds: 5,
+    });
+    expect(roster.players[0].sessions[1]).toMatchObject({
+      serverId: 12,
+      joinedAt: rejoinedAt,
+    });
+    expect(roster.players[0].sessions[1].leftAt).toBeUndefined();
+
+    await recordGtaPlayerDrop(
+      inst,
+      { serverId: 12, reason: "Current drop" },
+      droppedAt,
+    );
+    roster = await listGtaPlayers(inst, droppedAt + 1);
+
+    expect(roster.players[0].online).toBe(false);
+    expect(roster.players[0].sessions[1]).toMatchObject({
+      serverId: 12,
+      leftAt: droppedAt,
+      dropReason: "Current drop",
+    });
+  });
+
   it("closes stale heartbeat sessions before counting offline time", async () => {
     const inst = instance();
     const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
@@ -510,6 +556,27 @@ describe("GTA players", () => {
     expect(result.punishment.active).toBe(true);
     expect(result.liveCommand).toContain("slutvival_kick 7");
     expect(result.liveCommand).toContain("Banned: Repeated RDM");
+  });
+
+  it("creates distinct punishment ids for same-player actions in the same millisecond", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const joined = await recordGtaPlayerJoin(inst, bridgePlayer(), now);
+
+    const first = await recordGtaPlayerAction(
+      inst,
+      { action: "warn", playerId: joined.player.id, reason: "First warning" },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+    const second = await recordGtaPlayerAction(
+      inst,
+      { action: "warn", playerId: joined.player.id, reason: "Second warning" },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+
+    expect(first.punishment.id).not.toBe(second.punishment.id);
   });
 
   it("matches active bans by license and license2 identifiers", async () => {
