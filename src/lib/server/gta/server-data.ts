@@ -78,7 +78,7 @@ async function writeIfMissing(file: string, content: string): Promise<void> {
 }
 
 async function ensureBaseResources(dataPath: string): Promise<void> {
-  const marker = path.join(dataPath, "resources", "[system]", "mapmanager");
+  const marker = path.join(dataPath, "resources", "[managers]", "mapmanager");
   if (existsSync(marker)) return;
   const tmp = path.join(dataPath, `.cfx-server-data-${Date.now()}`);
   await fs.rm(tmp, { recursive: true, force: true });

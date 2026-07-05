@@ -4,6 +4,14 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Instance } from "@/lib/types";
 
+const childProcessMocks = vi.hoisted(() => ({
+  execFile: vi.fn(),
+}));
+
+vi.mock("node:child_process", () => ({
+  execFile: childProcessMocks.execFile,
+}));
+
 let root = "";
 
 function instance(): Instance {
@@ -42,6 +50,16 @@ async function loadModule() {
 
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), "slutvival-gta-"));
+  childProcessMocks.execFile.mockReset();
+  childProcessMocks.execFile.mockImplementation(
+    ((
+      _cmd: string,
+      _args: readonly string[],
+      callback: (error: Error | null) => void,
+    ) => {
+      callback(new Error("git clone should not run"));
+    }) as never,
+  );
 });
 
 afterEach(async () => {
@@ -82,5 +100,17 @@ describe("GTA server data", () => {
     );
 
     await expect(hasUsableGtaSecret(inst)).resolves.toBe(true);
+  });
+
+  it("does not reclone base resources when the Cfx mapmanager resource exists", async () => {
+    const { ensureGtaServerData } = await loadModule();
+    const inst = instance();
+    await fs.mkdir(path.join(inst.dataPath, "resources", "[managers]", "mapmanager"), {
+      recursive: true,
+    });
+
+    await ensureGtaServerData(inst);
+
+    expect(childProcessMocks.execFile).not.toHaveBeenCalled();
   });
 });

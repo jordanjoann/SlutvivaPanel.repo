@@ -19,6 +19,24 @@ describe("FXServer artifacts", () => {
     });
   });
 
+  it("parses the current FiveM artifact listing format", () => {
+    const html = `
+      <a href= "./25770-8ddccd4e4dfd6a760ce18651656463f961cc4761/fx.tar.xz" class="button is-link is-primary">
+        LATEST RECOMMENDED (25770)
+      </a>
+    `;
+
+    expect(
+      parseRecommendedFxServerArtifact(
+        html,
+        "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/",
+      ),
+    ).toEqual({
+      build: "25770",
+      url: "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/25770-8ddccd4e4dfd6a760ce18651656463f961cc4761/fx.tar.xz",
+    });
+  });
+
   it("throws when the recommended artifact is missing", () => {
     expect(() =>
       parseRecommendedFxServerArtifact(

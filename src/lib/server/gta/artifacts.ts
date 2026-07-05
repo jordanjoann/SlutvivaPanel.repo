@@ -19,7 +19,10 @@ export function parseRecommendedFxServerArtifact(
   html: string,
   baseUrl = ARTIFACTS_URL,
 ): FxServerArtifact {
-  const match = /href="([^"]+)"[^>]*>\s*LATEST RECOMMENDED \((\d+)\)/iu.exec(html);
+  const match =
+    /<a\b[^>]*\bhref\s*=\s*["']?\s*([^"'>\s]+)["']?[^>]*>\s*LATEST\s+RECOMMENDED\s*\((\d+)\)/iu.exec(
+      html,
+    );
   if (!match) {
     throw new Error("Could not find latest recommended FXServer Linux artifact");
   }

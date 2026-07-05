@@ -29,6 +29,7 @@ import {
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "@/lib/format";
+import { displayFilePath } from "@/components/vintage-story/file-manager-path";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,7 +69,13 @@ function fileIcon(node: { name: string; type: "file" | "dir" }) {
   return FileIcon;
 }
 
-export function FileManager({ id }: { id: string }) {
+export function FileManager({
+  id,
+  rootLabel = "/vintage",
+}: {
+  id: string;
+  rootLabel?: string;
+}) {
   const [cwd, setCwd] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [open, setOpen] = React.useState<OpenFile[]>([]);
@@ -245,7 +252,7 @@ export function FileManager({ id }: { id: string }) {
             className="flex items-center gap-1 rounded px-1 py-0.5 text-muted-foreground hover:text-foreground"
           >
             <HomeIcon className="size-3.5" />
-            <span>/vintage</span>
+            <span>{displayFilePath(rootLabel, "")}</span>
           </button>
           {segments.map((seg, i) => (
             <span key={i} className="flex items-center">
@@ -399,6 +406,7 @@ export function FileManager({ id }: { id: string }) {
               )
             }
             downloadUrl={api.files.downloadUrl(id, activeFile.path)}
+            rootLabel={rootLabel}
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
@@ -497,6 +505,7 @@ function FileEditor({
   onSave,
   onRevert,
   downloadUrl,
+  rootLabel,
 }: {
   file: OpenFile;
   saving: boolean;
@@ -504,6 +513,7 @@ function FileEditor({
   onSave: () => void;
   onRevert: () => void;
   downloadUrl: string;
+  rootLabel: string;
 }) {
   const gutter = React.useRef<HTMLDivElement>(null);
   const highlight = React.useRef<HTMLDivElement>(null);
@@ -558,7 +568,7 @@ function FileEditor({
           {syntax.label}
         </span>
         <span className="truncate font-mono text-xs text-muted-foreground">
-          {displayPath(file.path)}
+          {displayFilePath(rootLabel, file.path)}
         </span>
         {syntax.status === "invalid" && (
           <span className="min-w-0 truncate text-xs text-destructive">
@@ -634,10 +644,6 @@ function FileEditor({
 
 function join(dir: string, name: string): string {
   return dir ? `${dir}/${name}` : name;
-}
-
-function displayPath(path: string): string {
-  return path ? `/vintage/${path}` : "/vintage";
 }
 
 type SyntaxStatus = "valid" | "invalid" | "unchecked";

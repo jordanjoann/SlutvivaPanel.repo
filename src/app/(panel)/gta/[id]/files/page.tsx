@@ -10,7 +10,7 @@ export default function GtaFilesPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title="Files" description="Browse and edit FXServer data files." icon={FolderIcon} />
-      <FileManager id={id} />
+      <FileManager id={id} rootLabel="/GTA" />
     </div>
   );
 }
