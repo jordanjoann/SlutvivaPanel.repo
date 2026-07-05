@@ -40,12 +40,19 @@ const IDENTITY_PRIORITY: GtaIdentifierType[] = [
   "steam",
   "discord",
 ];
+const DURABLE_IDENTIFIER_TYPES = new Set<GtaIdentifierType>(IDENTITY_PRIORITY);
 
 export async function listGtaPlayers(
   inst: Instance,
   now = Date.now(),
 ): Promise<GtaPlayersPayload> {
-  return playersPayload(await readStore(inst), now);
+  const store = await readStore(inst);
+  const changed = closeStaleSessions(store, now);
+  if (changed) {
+    await writeJsonFile(playersFile(inst), store.players);
+    await writeJsonFile(sessionsFile(inst), store.sessions);
+  }
+  return playersPayload(store, now);
 }
 
 export async function recordGtaHeartbeat(
@@ -54,12 +61,14 @@ export async function recordGtaHeartbeat(
   now = Date.now(),
 ): Promise<GtaPlayersPayload> {
   const store = await readStore(inst);
+  closeStaleSessions(store, now);
   for (const player of players) {
-    const stored = upsertBridgePlayer(store.players, player, now);
+    const stored = upsertBridgePlayer(store, player, now);
     ensureOpenSession(store.sessions, stored, now);
   }
   await writeJsonFile(playersFile(inst), store.players);
   await writeJsonFile(sessionsFile(inst), store.sessions);
+  await writeJsonFile(punishmentsFile(inst), store.punishments);
   return playersPayload(store, now);
 }
 
@@ -69,10 +78,12 @@ export async function recordGtaPlayerJoin(
   now = Date.now(),
 ): Promise<{ player: GtaPlayerSummary }> {
   const store = await readStore(inst);
-  const stored = upsertBridgePlayer(store.players, player, now);
+  closeStaleSessions(store, now);
+  const stored = upsertBridgePlayer(store, player, now);
   ensureOpenSession(store.sessions, stored, now);
   await writeJsonFile(playersFile(inst), store.players);
   await writeJsonFile(sessionsFile(inst), store.sessions);
+  await writeJsonFile(punishmentsFile(inst), store.punishments);
   return {
     player: playerSummary(stored, store.sessions, store.punishments, now),
   };
@@ -163,16 +174,14 @@ export async function findActiveGtaBan(
   inst: Instance,
   identifiers: GtaPlayerIdentifier[],
 ): Promise<GtaPunishment | null> {
-  const normalized = normalizedIdentifierKeys(identifiers).filter(
-    (key) => key.startsWith("license:") || key.startsWith("license2:"),
-  );
+  const normalized = durableIdentifierKeys(identifiers);
   if (normalized.length === 0) return null;
 
   const store = await readStore(inst);
   const matchingPlayerIds = new Set(
     store.players
       .filter((player) =>
-        normalizedIdentifierKeys(player.identifiers).some((key) =>
+        durableIdentifierKeys(player.identifiers).some((key) =>
           normalized.includes(key),
         ),
       )
@@ -213,14 +222,43 @@ async function readStore(inst: Instance): Promise<GtaPlayerStore> {
 }
 
 function upsertBridgePlayer(
-  players: StoredGtaPlayer[],
+  store: GtaPlayerStore,
   bridgePlayer: GtaBridgePlayer,
   now: number,
 ): StoredGtaPlayer {
   const id = buildGtaPlayerId(bridgePlayer);
   const identifiers = normalizeIdentifiers(bridgePlayer.identifiers);
-  const current = players.find((player) => player.id === id);
+  const matchingPlayers = store.players.filter(
+    (player) =>
+      player.id === id ||
+      durableIdentifiersOverlap(player.identifiers, identifiers),
+  );
+  const current =
+    matchingPlayers.find((player) => player.id === id) ?? matchingPlayers[0];
   if (current) {
+    const oldIds = matchingPlayers.map((player) => player.id);
+    if (current.id !== id) {
+      current.id = id;
+    }
+    for (const matched of matchingPlayers) {
+      if (matched === current) continue;
+      current.identifiers = mergeIdentifiers(
+        current.identifiers,
+        matched.identifiers,
+      );
+      current.firstSeenAt = Math.min(current.firstSeenAt, matched.firstSeenAt);
+      current.lastSeenAt = Math.max(current.lastSeenAt, matched.lastSeenAt);
+      if (
+        current.lastHeartbeatAt === undefined ||
+        (matched.lastHeartbeatAt ?? 0) > current.lastHeartbeatAt
+      ) {
+        current.lastHeartbeatAt = matched.lastHeartbeatAt;
+      }
+    }
+    store.players = store.players.filter(
+      (player) => player === current || !matchingPlayers.includes(player),
+    );
+    migrateRelatedPlayerIds(store, oldIds, id);
     current.name = bridgePlayer.name;
     current.online = true;
     current.serverId = bridgePlayer.serverId;
@@ -242,8 +280,25 @@ function upsertBridgePlayer(
     lastSeenAt: now,
     lastHeartbeatAt: now,
   };
-  players.push(created);
+  store.players.push(created);
   return created;
+}
+
+function migrateRelatedPlayerIds(
+  store: GtaPlayerStore,
+  oldIds: string[],
+  nextId: string,
+): void {
+  for (const session of store.sessions) {
+    if (oldIds.includes(session.playerId)) {
+      session.playerId = nextId;
+    }
+  }
+  for (const punishment of store.punishments) {
+    if (oldIds.includes(punishment.playerId)) {
+      punishment.playerId = nextId;
+    }
+  }
 }
 
 function ensureOpenSession(
@@ -266,6 +321,32 @@ function ensureOpenSession(
     serverId: player.serverId,
     joinedAt: now,
   });
+}
+
+function closeStaleSessions(store: GtaPlayerStore, now: number): boolean {
+  let changed = false;
+  for (const player of store.players) {
+    if (isOnline(player, now)) continue;
+    if (!player.online || player.lastHeartbeatAt === undefined) continue;
+
+    const leftAt = player.lastHeartbeatAt;
+    for (const session of store.sessions) {
+      if (session.playerId !== player.id || session.leftAt !== undefined)
+        continue;
+      session.leftAt = leftAt;
+      session.durationSeconds = Math.max(
+        0,
+        Math.floor((leftAt - session.joinedAt) / 1000),
+      );
+      session.dropReason = "Heartbeat timed out";
+      changed = true;
+    }
+    player.online = false;
+    delete player.serverId;
+    delete player.pingMs;
+    changed = true;
+  }
+  return changed;
 }
 
 function playersPayload(store: GtaPlayerStore, now: number): GtaPlayersPayload {
@@ -383,12 +464,18 @@ function mergeIdentifiers(
   return normalizeIdentifiers([...current, ...incoming]);
 }
 
-function normalizedIdentifierKeys(
-  identifiers: GtaPlayerIdentifier[],
-): string[] {
-  return normalizeIdentifiers(identifiers).map(
-    (identifier) => `${identifier.type}:${identifier.value}`,
-  );
+function durableIdentifierKeys(identifiers: GtaPlayerIdentifier[]): string[] {
+  return normalizeIdentifiers(identifiers)
+    .filter((identifier) => DURABLE_IDENTIFIER_TYPES.has(identifier.type))
+    .map((identifier) => `${identifier.type}:${identifier.value}`);
+}
+
+function durableIdentifiersOverlap(
+  left: GtaPlayerIdentifier[],
+  right: GtaPlayerIdentifier[],
+): boolean {
+  const rightKeys = new Set(durableIdentifierKeys(right));
+  return durableIdentifierKeys(left).some((key) => rightKeys.has(key));
 }
 
 async function readJsonArray<T>(

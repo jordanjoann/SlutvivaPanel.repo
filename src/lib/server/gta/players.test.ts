@@ -127,6 +127,44 @@ describe("GTA players", () => {
     });
   });
 
+  it("migrates sessions and punishments when a stronger durable identifier appears", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const steamOnly = bridgePlayer({
+      identifiers: [{ type: "steam", value: "steam:110000112345678" }],
+    });
+    const licenseAndSteam = bridgePlayer({
+      identifiers: [
+        { type: "license", value: "license:new-license" },
+        { type: "steam", value: "steam:110000112345678" },
+      ],
+    });
+
+    const joined = await recordGtaPlayerJoin(inst, steamOnly, now);
+    await recordGtaPlayerAction(
+      inst,
+      { action: "warn", playerId: joined.player.id, reason: "Mind the rules" },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+    await recordGtaHeartbeat(inst, [licenseAndSteam], now + 2);
+
+    const roster = await listGtaPlayers(inst, now + 3);
+
+    expect(joined.player.id).toBe(buildGtaPlayerId(steamOnly));
+    expect(roster.players).toHaveLength(1);
+    expect(roster.players[0].id).toBe(buildGtaPlayerId(licenseAndSteam));
+    expect(roster.players[0].sessions).toHaveLength(1);
+    expect(roster.players[0].sessions[0].playerId).toBe(
+      buildGtaPlayerId(licenseAndSteam),
+    );
+    expect(roster.players[0].punishments).toHaveLength(1);
+    expect(roster.players[0].punishments[0]).toMatchObject({
+      playerId: buildGtaPlayerId(licenseAndSteam),
+      reason: "Mind the rules",
+    });
+  });
+
   it("records a closed session when a player drops", async () => {
     const inst = instance();
     const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
@@ -152,6 +190,34 @@ describe("GTA players", () => {
       durationSeconds: 180,
       dropReason: "Timed out",
     });
+  });
+
+  it("closes stale heartbeat sessions before counting offline time", async () => {
+    const inst = instance();
+    const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
+
+    await recordGtaPlayerJoin(inst, bridgePlayer(), joinedAt);
+
+    const timedOutRoster = await listGtaPlayers(inst, joinedAt + 31_000);
+
+    expect(timedOutRoster.players[0].online).toBe(false);
+    expect(timedOutRoster.players[0].sessions).toHaveLength(1);
+    expect(timedOutRoster.players[0].sessions[0]).toMatchObject({
+      joinedAt,
+      leftAt: joinedAt,
+      durationSeconds: 0,
+      dropReason: "Heartbeat timed out",
+    });
+
+    await recordGtaHeartbeat(inst, [bridgePlayer()], joinedAt + 60_000);
+    const rejoinedRoster = await listGtaPlayers(inst, joinedAt + 61_000);
+
+    expect(rejoinedRoster.players[0].online).toBe(true);
+    expect(rejoinedRoster.players[0].sessions).toHaveLength(2);
+    expect(rejoinedRoster.players[0].sessions[1]).toMatchObject({
+      joinedAt: joinedAt + 60_000,
+    });
+    expect(rejoinedRoster.players[0].sessions[1].leftAt).toBeUndefined();
   });
 
   it("requires reasons for warn and ban actions", async () => {
@@ -240,6 +306,34 @@ describe("GTA players", () => {
       { type: "license2", value: "license2:def456" },
     ]);
     expect(license2Ban?.reason).toBe("License2 nope");
+  });
+
+  it("matches active bans by non-license durable identifiers but not ip-only lookups", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const joined = await recordGtaPlayerJoin(
+      inst,
+      bridgePlayer({
+        identifiers: [{ type: "steam", value: "steam:110000112345678" }],
+      }),
+      now,
+    );
+    await recordGtaPlayerAction(
+      inst,
+      { action: "ban", playerId: joined.player.id, reason: "Steam ban" },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+
+    const steamBan = await findActiveGtaBan(inst, [
+      { type: "steam", value: "steam:110000112345678" },
+    ]);
+    const ipOnlyBan = await findActiveGtaBan(inst, [
+      { type: "ip", value: "ip:203.0.113.9" },
+    ]);
+
+    expect(steamBan?.reason).toBe("Steam ban");
+    expect(ipOnlyBan).toBeNull();
   });
 
   it("rejects kicking an offline player", async () => {
