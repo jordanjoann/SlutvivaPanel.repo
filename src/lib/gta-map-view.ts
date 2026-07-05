@@ -4,14 +4,19 @@ import type {
   GtaPlayerVehicle,
 } from "./types";
 
+export interface GtaMapBounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
 export const GTA_MAP_BOUNDS = {
   minX: -4500,
   maxX: 4500,
   minY: -4500,
   maxY: 8500,
-} as const;
-
-export type GtaMapBounds = typeof GTA_MAP_BOUNDS;
+} as const satisfies GtaMapBounds;
 
 export type GtaMappedPlayer = GtaPlayerSummary & {
   position: GtaPlayerPosition;

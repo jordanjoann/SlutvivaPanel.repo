@@ -65,6 +65,12 @@ describe("GTA map view helpers", () => {
       xPercent: 100,
       yPercent: 100,
     });
+    expect(
+      projectGtaPosition(
+        { x: 0, y: 0, z: 0 },
+        { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000 },
+      ),
+    ).toEqual({ xPercent: 50, yPercent: 50 });
   });
 
   it("formats hover telemetry", () => {
