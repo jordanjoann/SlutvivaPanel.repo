@@ -212,6 +212,42 @@ describe("GTA players", () => {
     });
   });
 
+  it("records moderation actions against alias player ids after migration", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const steamOnly = bridgePlayer({
+      serverId: 3,
+      identifiers: [{ type: "steam", value: "steam:action-alias" }],
+    });
+    const licenseAndSteam = bridgePlayer({
+      serverId: 12,
+      identifiers: [
+        { type: "license", value: "license:action-alias" },
+        { type: "steam", value: "steam:action-alias" },
+      ],
+    });
+
+    const joined = await recordGtaPlayerJoin(inst, steamOnly, now);
+    await recordGtaHeartbeat(inst, [licenseAndSteam], now + 1);
+
+    const result = await recordGtaPlayerAction(
+      inst,
+      { action: "ban", playerId: joined.player.id, reason: "Alias ban" },
+      { id: "u_owner", username: "Owner" },
+      now + 2,
+    );
+
+    expect(joined.player.id).toBe(buildGtaPlayerId(steamOnly));
+    expect(result.punishment).toMatchObject({
+      playerId: buildGtaPlayerId(licenseAndSteam),
+      type: "ban",
+      active: true,
+      reason: "Alias ban",
+    });
+    expect(result.liveCommand).toContain("slutvival_kick 12");
+    expect(result.liveCommand).toContain("Banned: Alias ban");
+  });
+
   it("associates old-id punishments through player aliases after partial migration", async () => {
     const inst = instance();
     const now = Date.UTC(2026, 6, 5, 12, 0, 0);

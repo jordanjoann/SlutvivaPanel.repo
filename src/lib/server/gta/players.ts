@@ -222,8 +222,8 @@ async function recordGtaPlayerActionUnlocked(
   now: number,
 ): Promise<GtaPlayerActionResult> {
   const store = await readStore(inst);
-  const player = store.players.find(
-    (candidate) => candidate.id === input.playerId,
+  const player = store.players.find((candidate) =>
+    playerHasAssociatedId(candidate, input.playerId),
   );
   if (!player) throw new Error("GTA player was not found");
 
