@@ -65,6 +65,32 @@ function bridgePlayer(
   };
 }
 
+type GtaLiveTelemetry = Pick<
+  GtaBridgePlayer,
+  "position" | "heading" | "health" | "armour" | "vehicle"
+>;
+
+function liveTelemetry(
+  overrides: Partial<GtaLiveTelemetry> = {},
+): GtaLiveTelemetry {
+  return {
+    position: { x: 10, y: 20, z: 30 },
+    heading: 180,
+    health: 160,
+    armour: 25,
+    vehicle: { inVehicle: false },
+    ...overrides,
+  };
+}
+
+function expectNoLiveTelemetry(player: GtaLiveTelemetry): void {
+  expect(player.position).toBeUndefined();
+  expect(player.heading).toBeUndefined();
+  expect(player.health).toBeUndefined();
+  expect(player.armour).toBeUndefined();
+  expect(player.vehicle).toBeUndefined();
+}
+
 function expectedPlayerId(stableKey: string): string {
   return `gta_${crypto.createHash("sha256").update(stableKey).digest("hex").slice(0, 20)}`;
 }
@@ -645,6 +671,7 @@ describe("GTA players", () => {
       serverId: 7,
       name: "Player A",
       identifiers: [{ type: "license", value: "license:a" }],
+      ...liveTelemetry(),
     });
     const playerB = bridgePlayer({
       serverId: 7,
@@ -670,6 +697,7 @@ describe("GTA players", () => {
     expect(stalePlayer).toMatchObject({
       online: false,
     });
+    expectNoLiveTelemetry(stalePlayer ?? {});
     expect(stalePlayer?.sessions[0]).toMatchObject({
       leftAt: now + 1_000,
       durationSeconds: 1,
@@ -693,6 +721,7 @@ describe("GTA players", () => {
       serverId: 7,
       name: "Join A",
       identifiers: [{ type: "license", value: "license:join-a" }],
+      ...liveTelemetry(),
     });
     const playerB = bridgePlayer({
       serverId: 7,
@@ -718,6 +747,7 @@ describe("GTA players", () => {
     expect(stalePlayer).toMatchObject({
       online: false,
     });
+    expectNoLiveTelemetry(stalePlayer ?? {});
     expect(stalePlayer?.sessions[0]).toMatchObject({
       leftAt: now + 1_000,
       durationSeconds: 1,
@@ -837,11 +867,18 @@ describe("GTA players", () => {
     const inst = instance();
     const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
 
-    await recordGtaPlayerJoin(inst, bridgePlayer(), joinedAt);
+    await recordGtaPlayerJoin(
+      inst,
+      bridgePlayer({
+        ...liveTelemetry(),
+      }),
+      joinedAt,
+    );
 
     const timedOutRoster = await listGtaPlayers(inst, joinedAt + 31_000);
 
     expect(timedOutRoster.players[0].online).toBe(false);
+    expectNoLiveTelemetry(timedOutRoster.players[0]);
     expect(timedOutRoster.players[0].sessions).toHaveLength(1);
     expect(timedOutRoster.players[0].sessions[0]).toMatchObject({
       joinedAt,
@@ -920,6 +957,45 @@ describe("GTA players", () => {
       durationSeconds: 10,
       dropReason: "State repaired",
     });
+  });
+
+  it("repairs stale telemetry on persisted offline players", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const storageDir = path.join(inst.dataPath, "slutvival");
+    const playersFile = path.join(storageDir, "players.json");
+    await fs.mkdir(storageDir, { recursive: true });
+    await fs.writeFile(
+      playersFile,
+      `${JSON.stringify(
+        [
+          {
+            id: "gta_offline_telemetry",
+            name: "Offline Telemetry",
+            online: false,
+            identifiers: [],
+            firstSeenAt: now,
+            lastSeenAt: now,
+            lastHeartbeatAt: now,
+            position: { x: 11, y: 22, z: 33 },
+            heading: 270,
+            health: 125,
+            armour: 5,
+            vehicle: { inVehicle: true, model: "adder" },
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const roster = await listGtaPlayers(inst, now + 1);
+    const persistedPlayers = JSON.parse(await fs.readFile(playersFile, "utf8"));
+
+    expect(roster.players[0]).toMatchObject({ online: false });
+    expectNoLiveTelemetry(roster.players[0]);
+    expectNoLiveTelemetry(persistedPlayers[0]);
   });
 
   it("ignores late drops after heartbeat timeout closes the session", async () => {
@@ -1083,6 +1159,48 @@ describe("GTA players", () => {
       },
     ]);
     await expect(listGtaPlayers(badPlayerInst, now)).rejects.toThrow(
+      /invalid record/i,
+    );
+
+    const badPlayerPositionInst: Instance = {
+      ...instance(),
+      id: "bad-player-position",
+      dataPath: path.join(root, "bad-player-position-data"),
+    };
+    await writeStorageFile(badPlayerPositionInst, "players.json", [
+      {
+        id: "gta_bad_player_position",
+        name: "Bad Player Position",
+        online: true,
+        identifiers: [],
+        firstSeenAt: now,
+        lastSeenAt: now,
+        lastHeartbeatAt: now,
+        position: { x: "bad", y: 0, z: 0 },
+      },
+    ]);
+    await expect(listGtaPlayers(badPlayerPositionInst, now)).rejects.toThrow(
+      /invalid record/i,
+    );
+
+    const badPlayerVehicleInst: Instance = {
+      ...instance(),
+      id: "bad-player-vehicle",
+      dataPath: path.join(root, "bad-player-vehicle-data"),
+    };
+    await writeStorageFile(badPlayerVehicleInst, "players.json", [
+      {
+        id: "gta_bad_player_vehicle",
+        name: "Bad Player Vehicle",
+        online: true,
+        identifiers: [],
+        firstSeenAt: now,
+        lastSeenAt: now,
+        lastHeartbeatAt: now,
+        vehicle: { inVehicle: "bad" },
+      },
+    ]);
+    await expect(listGtaPlayers(badPlayerVehicleInst, now)).rejects.toThrow(
       /invalid record/i,
     );
 
@@ -1362,28 +1480,7 @@ describe("GTA players", () => {
   it("stores live map telemetry from heartbeat players", async () => {
     const inst = instance();
     const now = Date.UTC(2026, 6, 5, 12, 0, 0);
-
-    const roster = await recordGtaHeartbeat(
-      inst,
-      [
-        bridgePlayer({
-          position: { x: 101.25, y: -202.5, z: 33.75 },
-          heading: 91.5,
-          health: 187,
-          armour: 42,
-          vehicle: {
-            inVehicle: true,
-            model: "adder",
-            modelHash: 3078201489,
-            plate: "MAP001",
-          },
-        }),
-      ],
-      now,
-    );
-
-    expect(roster.players[0]).toMatchObject({
-      online: true,
+    const telemetry = {
       position: { x: 101.25, y: -202.5, z: 33.75 },
       heading: 91.5,
       health: 187,
@@ -1394,6 +1491,27 @@ describe("GTA players", () => {
         modelHash: 3078201489,
         plate: "MAP001",
       },
+    };
+
+    const roster = await recordGtaHeartbeat(
+      inst,
+      [
+        bridgePlayer({
+          ...telemetry,
+        }),
+      ],
+      now,
+    );
+    const persistedRoster = await listGtaPlayers(inst, now + 1);
+
+    expect(roster.players[0]).toMatchObject({
+      online: true,
+      ...telemetry,
+      lastHeartbeatAt: now,
+    });
+    expect(persistedRoster.players[0]).toMatchObject({
+      online: true,
+      ...telemetry,
       lastHeartbeatAt: now,
     });
   });
@@ -1404,11 +1522,7 @@ describe("GTA players", () => {
     const joined = await recordGtaPlayerJoin(
       inst,
       bridgePlayer({
-        position: { x: 10, y: 20, z: 30 },
-        heading: 180,
-        health: 160,
-        armour: 25,
-        vehicle: { inVehicle: false },
+        ...liveTelemetry(),
       }),
       joinedAt,
     );
@@ -1422,11 +1536,7 @@ describe("GTA players", () => {
     const roster = await listGtaPlayers(inst, joinedAt + 10_001);
 
     expect(roster.players[0]).toMatchObject({ online: false });
-    expect(roster.players[0].position).toBeUndefined();
-    expect(roster.players[0].heading).toBeUndefined();
-    expect(roster.players[0].health).toBeUndefined();
-    expect(roster.players[0].armour).toBeUndefined();
-    expect(roster.players[0].vehicle).toBeUndefined();
+    expectNoLiveTelemetry(roster.players[0]);
   });
 
   it("rejects malformed live telemetry in bridge heartbeat payloads", async () => {

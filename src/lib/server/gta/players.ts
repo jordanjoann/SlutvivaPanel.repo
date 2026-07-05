@@ -583,12 +583,20 @@ function assignLiveTelemetry(
   }
 }
 
-function clearLiveTelemetry(player: StoredGtaPlayer): void {
+function clearLiveTelemetry(player: StoredGtaPlayer): boolean {
+  const hadTelemetry =
+    player.position !== undefined ||
+    player.heading !== undefined ||
+    player.health !== undefined ||
+    player.armour !== undefined ||
+    player.vehicle !== undefined;
+
   delete player.position;
   delete player.heading;
   delete player.health;
   delete player.armour;
   delete player.vehicle;
+  return hadTelemetry;
 }
 
 function migrateRelatedPlayerIds(
@@ -670,6 +678,9 @@ function closeStaleSessions(store: GtaPlayerStore, now: number): boolean {
   for (const player of store.players) {
     if (isOnline(player, now)) continue;
     if (!player.online) {
+      if (clearLiveTelemetry(player)) {
+        changed = true;
+      }
       const leftAt = player.lastSeenAt ?? player.lastHeartbeatAt ?? now;
       for (const session of store.sessions) {
         if (
@@ -831,11 +842,11 @@ function playerSummary(
     online,
     serverId: online ? player.serverId : undefined,
     pingMs: online ? player.pingMs : undefined,
-    position: player.position,
-    heading: player.heading,
-    health: player.health,
-    armour: player.armour,
-    vehicle: player.vehicle,
+    position: online ? player.position : undefined,
+    heading: online ? player.heading : undefined,
+    health: online ? player.health : undefined,
+    armour: online ? player.armour : undefined,
+    vehicle: online ? player.vehicle : undefined,
     lastHeartbeatAt: player.lastHeartbeatAt,
     identifiers: player.identifiers,
     firstSeenAt: player.firstSeenAt,
