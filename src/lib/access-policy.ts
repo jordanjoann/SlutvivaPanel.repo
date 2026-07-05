@@ -40,6 +40,7 @@ export function canAccessPagePath(role: PanelRole, pathname: string): boolean {
 export function canAccessApiPath(role: PanelRole, pathname: string): boolean {
   if (role === "owner") return true;
   if (AUTH_API_PATHS.has(pathname)) return true;
+  if (/^\/api\/instances\/[^/]+\/gta\/bridge$/.test(pathname)) return true;
   if (!isLimitedVintageManagerRole(role)) return false;
 
   if (pathname === "/api/instances") return true;

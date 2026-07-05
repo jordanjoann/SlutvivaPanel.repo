@@ -42,6 +42,12 @@ describe("role access policy", () => {
     expect(canAccessApiPath("viewer", "/api/instances/test/players")).toBe(false);
   });
 
+  it("allows unauthenticated GTA bridge ingress without opening GTA player APIs", () => {
+    expect(canAccessApiPath("viewer", "/api/instances/los-santos/gta/bridge")).toBe(true);
+    expect(canAccessApiPath("viewer", "/api/instances/los-santos/gta/players")).toBe(false);
+    expect(canAccessApiPath("viewer", "/api/instances/los-santos/gta/players/action")).toBe(false);
+  });
+
   it("allows limited Vintage Story API reads for admins and moderators only", () => {
     for (const role of ["admin", "moderator"] as const) {
       expect(canAccessApiPath(role, "/api/instances")).toBe(true);
