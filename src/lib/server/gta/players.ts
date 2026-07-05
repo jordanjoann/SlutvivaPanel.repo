@@ -226,9 +226,9 @@ export function buildGtaPlayerId(
   const identifiers = normalizeIdentifiers(player.identifiers);
   for (const type of IDENTITY_PRIORITY) {
     const identifier = identifiers.find((candidate) => candidate.type === type);
-    if (identifier) return buildRecordId("gta", `${type}:${identifier.value}`);
+    if (identifier) return buildRecordId("gta", identifier.value);
   }
-  return buildRecordId("gta", `name:${player.name.trim().toLowerCase()}`);
+  return buildRecordId("gta", player.name.trim().toLowerCase());
 }
 
 export function buildGtaKickCommand(serverId: number, reason: string): string {

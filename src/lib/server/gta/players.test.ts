@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -62,6 +63,10 @@ function bridgePlayer(
   };
 }
 
+function expectedPlayerId(stableKey: string): string {
+  return `gta_${crypto.createHash("sha256").update(stableKey).digest("hex").slice(0, 20)}`;
+}
+
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), "slutvival-gta-players-"));
 });
@@ -72,6 +77,24 @@ afterEach(async () => {
 });
 
 describe("GTA players", () => {
+  it("builds player ids from the normalized selected identifier value", () => {
+    expect(
+      buildGtaPlayerId({
+        name: "Bocephus",
+        identifiers: [{ type: "license", value: " LICENSE:ABC123 " }],
+      }),
+    ).toBe(expectedPlayerId("license:abc123"));
+  });
+
+  it("builds fallback player ids from the lowercased player name", () => {
+    expect(
+      buildGtaPlayerId({
+        name: " Bocephus ",
+        identifiers: [],
+      }),
+    ).toBe(expectedPlayerId("bocephus"));
+  });
+
   it("tracks empty bridge heartbeats independently of player heartbeats", async () => {
     const inst = instance();
     const now = Date.UTC(2026, 6, 5, 12, 0, 0);
