@@ -8,6 +8,7 @@ import type {
   Instance,
 } from "@/lib/types";
 import {
+  buildGtaPlayerId,
   findActiveGtaBan,
   listGtaPlayers,
   recordGtaHeartbeat,
@@ -76,7 +77,11 @@ describe("GTA players", () => {
 
     const joined = await recordGtaPlayerJoin(
       inst,
-      bridgePlayer({ serverId: 3, name: "Offline Soon" }),
+      bridgePlayer({
+        serverId: 3,
+        name: "Offline Soon",
+        identifiers: [{ type: "license", value: "license:offline456" }],
+      }),
       now,
     );
     await recordGtaPlayerDrop(
@@ -100,6 +105,26 @@ describe("GTA players", () => {
     ]);
     expect(roster.players[0].serverId).toBe(7);
     expect(roster.players[0].pingMs).toBe(44);
+  });
+
+  it("keeps the required stable player id when a durable identifier changes names", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const original = bridgePlayer({ name: "Original Name" });
+    const renamed = bridgePlayer({ name: "Renamed Player" });
+
+    const joined = await recordGtaPlayerJoin(inst, original, now);
+    await recordGtaHeartbeat(inst, [renamed], now + 1);
+
+    const roster = await listGtaPlayers(inst, now + 2);
+
+    expect(joined.player.id).toBe(buildGtaPlayerId(original));
+    expect(roster.players).toHaveLength(1);
+    expect(roster.players[0]).toMatchObject({
+      id: buildGtaPlayerId(renamed),
+      name: "Renamed Player",
+      online: true,
+    });
   });
 
   it("records a closed session when a player drops", async () => {
@@ -169,24 +194,52 @@ describe("GTA players", () => {
   it("matches active bans by license and license2 identifiers", async () => {
     const inst = instance();
     const now = Date.UTC(2026, 6, 5, 12, 0, 0);
-    const joined = await recordGtaPlayerJoin(
+    const licenseJoined = await recordGtaPlayerJoin(
       inst,
       bridgePlayer({
+        identifiers: [{ type: "license", value: "license:abc123" }],
+      }),
+      now,
+    );
+    await recordGtaPlayerAction(
+      inst,
+      {
+        action: "ban",
+        playerId: licenseJoined.player.id,
+        reason: "License nope",
+      },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+
+    const license2Joined = await recordGtaPlayerJoin(
+      inst,
+      bridgePlayer({
+        name: "Second License",
         identifiers: [{ type: "license2", value: "license2:def456" }],
       }),
       now,
     );
     await recordGtaPlayerAction(
       inst,
-      { action: "ban", playerId: joined.player.id, reason: "Nope" },
+      {
+        action: "ban",
+        playerId: license2Joined.player.id,
+        reason: "License2 nope",
+      },
       { id: "u_owner", username: "Owner" },
-      now + 1,
+      now + 2,
     );
 
-    const ban = await findActiveGtaBan(inst, [
+    const licenseBan = await findActiveGtaBan(inst, [
+      { type: "license", value: "license:abc123" },
+    ]);
+    expect(licenseBan?.reason).toBe("License nope");
+
+    const license2Ban = await findActiveGtaBan(inst, [
       { type: "license2", value: "license2:def456" },
     ]);
-    expect(ban?.reason).toBe("Nope");
+    expect(license2Ban?.reason).toBe("License2 nope");
   });
 
   it("rejects kicking an offline player", async () => {

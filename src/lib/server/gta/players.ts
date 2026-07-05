@@ -217,7 +217,7 @@ function upsertBridgePlayer(
   bridgePlayer: GtaBridgePlayer,
   now: number,
 ): StoredGtaPlayer {
-  const id = playerIdForBridgePlayer(players, bridgePlayer);
+  const id = buildGtaPlayerId(bridgePlayer);
   const identifiers = normalizeIdentifiers(bridgePlayer.identifiers);
   const current = players.find((player) => player.id === id);
   if (current) {
@@ -244,20 +244,6 @@ function upsertBridgePlayer(
   };
   players.push(created);
   return created;
-}
-
-function playerIdForBridgePlayer(
-  players: StoredGtaPlayer[],
-  bridgePlayer: GtaBridgePlayer,
-): string {
-  const id = buildGtaPlayerId(bridgePlayer);
-  const current = players.find((player) => player.id === id);
-  if (!current || samePlayerName(current.name, bridgePlayer.name)) return id;
-
-  return buildRecordId(
-    "gta",
-    `${id}:name:${bridgePlayer.name.trim().toLowerCase()}`,
-  );
 }
 
 function ensureOpenSession(
@@ -403,10 +389,6 @@ function normalizedIdentifierKeys(
   return normalizeIdentifiers(identifiers).map(
     (identifier) => `${identifier.type}:${identifier.value}`,
   );
-}
-
-function samePlayerName(left: string, right: string): boolean {
-  return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
 async function readJsonArray<T>(
