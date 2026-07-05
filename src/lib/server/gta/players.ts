@@ -732,27 +732,46 @@ async function readJsonArray<T>(
   file: string,
   guard: (value: unknown) => value is T,
 ): Promise<T[]> {
+  let raw: string;
   try {
-    const raw = await fs.readFile(file, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(guard);
-  } catch {
-    return [];
+    raw = await fs.readFile(file, "utf8");
+  } catch (error) {
+    if (isNotFoundError(error)) return [];
+    throw error;
   }
+
+  const parsed = JSON.parse(raw) as unknown;
+  if (!Array.isArray(parsed)) {
+    throw new Error(`${file} must contain a JSON array`);
+  }
+
+  const values: T[] = [];
+  for (const [index, value] of parsed.entries()) {
+    if (!guard(value)) {
+      throw new Error(`${file} contains an invalid record at index ${index}`);
+    }
+    values.push(value);
+  }
+  return values;
 }
 
 async function readJsonObject<T>(
   file: string,
   guard: (value: unknown) => value is T,
 ): Promise<T | null> {
+  let raw: string;
   try {
-    const raw = await fs.readFile(file, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    return guard(parsed) ? parsed : null;
-  } catch {
-    return null;
+    raw = await fs.readFile(file, "utf8");
+  } catch (error) {
+    if (isNotFoundError(error)) return null;
+    throw error;
   }
+
+  const parsed = JSON.parse(raw) as unknown;
+  if (!guard(parsed)) {
+    throw new Error(`${file} must contain a valid JSON object`);
+  }
+  return parsed;
 }
 
 async function writeJsonFile(file: string, value: unknown): Promise<void> {
@@ -854,6 +873,10 @@ function isGtaBridgeState(value: unknown): value is GtaBridgeState {
     value.lastHeartbeatAt === undefined ||
     typeof value.lastHeartbeatAt === "number"
   );
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return isRecord(error) && error.code === "ENOENT";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

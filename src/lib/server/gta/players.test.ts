@@ -9,6 +9,7 @@ import type {
   Instance,
 } from "@/lib/types";
 import {
+  buildGtaKickCommand,
   buildGtaPlayerId,
   findActiveGtaBan,
   listGtaPlayers,
@@ -77,6 +78,12 @@ afterEach(async () => {
 });
 
 describe("GTA players", () => {
+  it("flattens newlines in kick command reasons", () => {
+    expect(buildGtaKickCommand(7, "Banned:\nNope")).toBe(
+      "slutvival_kick 7 Banned: Nope",
+    );
+  });
+
   it("builds player ids from the normalized selected identifier value", () => {
     expect(
       buildGtaPlayerId({
@@ -781,6 +788,42 @@ describe("GTA players", () => {
     expect(result.punishment.active).toBe(true);
     expect(result.liveCommand).toContain("slutvival_kick 7");
     expect(result.liveCommand).toContain("Banned: Repeated RDM");
+  });
+
+  it("rejects actions when punishments storage is corrupt without overwriting it", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const joined = await recordGtaPlayerJoin(inst, bridgePlayer(), now);
+    await recordGtaPlayerAction(
+      inst,
+      { action: "warn", playerId: joined.player.id, reason: "First warning" },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+
+    const punishmentsFile = path.join(
+      inst.dataPath,
+      "slutvival",
+      "punishments.json",
+    );
+    const corruptContent = "{ invalid punishment json";
+    await fs.writeFile(punishmentsFile, corruptContent, "utf8");
+
+    await expect(
+      recordGtaPlayerAction(
+        inst,
+        {
+          action: "warn",
+          playerId: joined.player.id,
+          reason: "Second warning",
+        },
+        { id: "u_owner", username: "Owner" },
+        now + 2,
+      ),
+    ).rejects.toThrow();
+    await expect(fs.readFile(punishmentsFile, "utf8")).resolves.toBe(
+      corruptContent,
+    );
   });
 
   it("creates distinct punishment ids for same-player actions in the same millisecond", async () => {
