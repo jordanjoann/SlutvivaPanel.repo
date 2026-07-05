@@ -84,6 +84,18 @@ describe("GTA server data", () => {
     await expect(hasUsableGtaSecret(inst)).resolves.toBe(true);
   });
 
+  it("returns null when no bridge token has been seeded", async () => {
+    const { gtaSecretTemplate, readGtaBridgeToken } = await loadModule();
+    const inst = instance();
+
+    await expect(readGtaBridgeToken(inst)).resolves.toBeNull();
+
+    await fs.mkdir(inst.dataPath, { recursive: true });
+    await fs.writeFile(path.join(inst.dataPath, "server.secret.cfg"), gtaSecretTemplate(), "utf8");
+
+    await expect(readGtaBridgeToken(inst)).resolves.toBeNull();
+  });
+
   it("seeds the Slutvival admin resource and bridge token", async () => {
     const { ensureGtaServerData, readGtaBridgeToken } = await loadModule();
     const inst = instance();
@@ -138,6 +150,14 @@ describe("GTA server data", () => {
     expect(serverLua).toContain("players = collectPlayers()");
     expect(serverLua).toContain("serverId = tonumber(player)");
     expect(serverLua).toContain("type = identifierType");
+    expect(serverLua).toContain("SUPPORTED_IDENTIFIER_TYPES");
+    expect(serverLua).toContain("SUPPORTED_IDENTIFIER_TYPES[identifierType]");
+    expect(serverLua).toContain("license = true");
+    expect(serverLua).toContain("license2 = true");
+    expect(serverLua).toContain("discord = true");
+    expect(serverLua).toContain("steam = true");
+    expect(serverLua).toContain("fivem = true");
+    expect(serverLua).toContain("ip = true");
     expect(serverLua).toContain("player = collectPlayer(player, playerName)");
     expect(serverLua).not.toContain("playerSource = player");
     expect(serverLua).not.toContain("print(bridgeToken)");

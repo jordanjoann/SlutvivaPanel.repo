@@ -24,12 +24,25 @@ const SLUTVIVAL_ADMIN_SERVER_LUA = `local panelUrl = GetConvar("slutvival_panel_
 local serverId = GetConvar("slutvival_panel_server_id", "")
 local bridgeToken = GetConvar("slutvival_bridge_token", "")
 
+local SUPPORTED_IDENTIFIER_TYPES = {
+  license = true,
+  license2 = true,
+  discord = true,
+  steam = true,
+  fivem = true,
+  ip = true,
+}
+
 local function structuredIdentifier(identifier)
   local separator = string.find(identifier, ":", 1, true)
   local identifierType = "unknown"
 
   if separator and separator > 1 then
     identifierType = string.sub(identifier, 1, separator - 1)
+  end
+
+  if not SUPPORTED_IDENTIFIER_TYPES[identifierType] then
+    identifierType = "unknown"
   end
 
   return {
