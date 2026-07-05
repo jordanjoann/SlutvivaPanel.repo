@@ -8,6 +8,7 @@ import {
   toWorldConfigurationPayload,
 } from "@/lib/vintage-story-world";
 import { vsPaths } from "./config";
+import { ensureGtaServerData } from "./gta/server-data";
 
 const LAND_CLAIM_MIN_SIZE = { X: 5, Y: 5, Z: 5 };
 
@@ -147,6 +148,11 @@ async function writeJson(file: string, data: unknown) {
 }
 
 export async function ensureRunnableServerConfig(inst: Instance): Promise<void> {
+  if (inst.game === "gta") {
+    await ensureGtaServerData(inst);
+    return;
+  }
+
   const file = vsPaths(inst.id).serverConfig;
   if (!existsSync(file)) {
     await writeJson(file, serverConfig(inst));
@@ -167,6 +173,11 @@ export async function seedInstanceContent(
   inst: Instance,
   input?: Pick<CreateInstanceInput, "initialWorldConfig" | "serverPassword">,
 ): Promise<void> {
+  if (inst.game === "gta") {
+    await ensureGtaServerData(inst, { cloneBaseResources: false });
+    return;
+  }
+
   const p = vsPaths(inst.id);
 
   await writeJson(p.serverConfig, serverConfig(inst, input));

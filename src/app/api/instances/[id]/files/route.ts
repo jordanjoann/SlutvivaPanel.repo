@@ -1,15 +1,34 @@
 import * as files from "@/lib/server/files";
-import { json, ok, badRequest, serverError } from "@/lib/server/http";
+import {
+  json,
+  ok,
+  badRequest,
+  serverError,
+} from "@/lib/server/http";
+import { requireInstanceGameAccess } from "@/lib/server/instance-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+function isUploadedFile(value: FormDataEntryValue): value is File {
+  return (
+    typeof value !== "string" &&
+    "name" in value &&
+    typeof value.name === "string" &&
+    "arrayBuffer" in value &&
+    typeof value.arrayBuffer === "function"
+  );
+}
+
 /** List a directory: GET ?path=relative/dir */
 export async function GET(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    const access = await requireInstanceGameAccess(id);
+    if ("response" in access) return access.response;
+
     const path = new URL(req.url).searchParams.get("path") ?? "";
     return json({ path, entries: await files.listDir(id, path) });
   } catch (e) {
@@ -21,6 +40,9 @@ export async function GET(req: Request, { params }: Ctx) {
 export async function POST(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    const access = await requireInstanceGameAccess(id);
+    if ("response" in access) return access.response;
+
     const body = (await req.json()) as {
       op?: string;
       path?: string;
@@ -56,9 +78,12 @@ export async function POST(req: Request, { params }: Ctx) {
 export async function PUT(req: Request, { params }: Ctx) {
   try {
     const { id } = await params;
+    const access = await requireInstanceGameAccess(id);
+    if ("response" in access) return access.response;
+
     const form = await req.formData();
     const dir = (form.get("path") as string) ?? "";
-    const uploaded = form.getAll("files").filter((f): f is File => f instanceof File);
+    const uploaded = form.getAll("files").filter(isUploadedFile);
     for (const file of uploaded) {
       const buf = Buffer.from(await file.arrayBuffer());
       const target = dir ? `${dir}/${file.name}` : file.name;

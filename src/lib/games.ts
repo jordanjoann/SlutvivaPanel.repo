@@ -10,9 +10,9 @@ export const GAMES: Record<GameId, GameMeta> = {
   },
   gta: {
     id: "gta",
-    name: "GTA / FiveM",
+    name: "GTA 5",
     tagline: "Roleplay and racing servers on FiveM.",
-    available: false,
+    available: true,
     accent: "#e6b566",
   },
   "abiotic-factor": {

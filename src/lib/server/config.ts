@@ -1,5 +1,6 @@
 import path from "node:path";
 import os from "node:os";
+import type { GameId } from "@/lib/types";
 
 /**
  * Central path + infrastructure configuration.
@@ -80,23 +81,53 @@ export const config = {
   hostname: os.hostname(),
 } as const;
 
+export const MANAGED_GAMES: GameId[] = ["vintage-story", "gta"];
+
+export function gameRoot(game: GameId): string {
+  switch (game) {
+    case "vintage-story":
+      return config.vintageStoryRoot;
+    case "gta":
+      return path.join(config.gamesRoot, "gta");
+    default:
+      return path.join(config.gamesRoot, game);
+  }
+}
+
+export function instanceDirForGame(game: GameId, serverId: string): string {
+  return path.join(gameRoot(game), serverId);
+}
+
+export function instanceDataPathForGame(game: GameId, serverId: string): string {
+  if (game === "gta") return path.join(instanceDirForGame(game, serverId), "server-data");
+  return path.join(instanceDirForGame(game, serverId), "vintage");
+}
+
+export function instanceServerPathForGame(game: GameId, serverId: string): string {
+  return path.join(instanceDirForGame(game, serverId), "server");
+}
+
+export function serverYmlPathForGame(game: GameId, serverId: string): string {
+  return path.join(instanceDirForGame(game, serverId), "server.yml");
+}
+
 /** The directory holding a single Vintage Story instance. */
 export function instanceDir(serverId: string): string {
-  return path.join(config.vintageStoryRoot, serverId);
+  return instanceDirForGame("vintage-story", serverId);
 }
 
 /** The Vintage Story `--dataPath` for an instance. */
 export function instanceDataPath(serverId: string): string {
-  return path.join(instanceDir(serverId), "vintage");
+  return instanceDataPathForGame("vintage-story", serverId);
 }
 
 /** The install path for Vintage Story server binaries for an instance. */
 export function instanceServerPath(serverId: string): string {
-  return path.join(instanceDir(serverId), "server");
+  return instanceServerPathForGame("vintage-story", serverId);
 }
 
 export function serverYmlPath(serverId: string): string {
-  return path.join(instanceDir(serverId), "server.yml");
+  return serverYmlPathForGame("vintage-story", serverId);
 }
 
 /** Well-known sub-directories inside a VS data path. */
@@ -124,3 +155,5 @@ export const VS_DATA_SUBDIRS = [
   "Backups",
   "BackupSaves",
 ] as const;
+
+export const GTA_DATA_SUBDIRS = ["resources", "cache", "txData"] as const;

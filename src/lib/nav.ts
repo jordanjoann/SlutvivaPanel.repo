@@ -36,7 +36,7 @@ export const NAV: NavGroup[] = [
     label: "Software & Games",
     items: [
       { label: "Vintage Story", href: "/vintage-story", icon: Mountain, available: true },
-      { label: "GTA / FiveM", href: "/gta", icon: Car, badge: "Soon" },
+      { label: "GTA 5", href: "/gta", icon: Car, available: true },
       { label: "Abiotic Factor", href: "/abiotic-factor", icon: FlaskConical, badge: "Soon" },
       { label: "Project Zomboid", href: "/project-zomboid", icon: Skull, badge: "Soon" },
       { label: "Garry's Mod", href: "/garrys-mod", icon: Wrench, badge: "Soon" },

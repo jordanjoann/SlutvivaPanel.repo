@@ -3,7 +3,7 @@ import type { Instance, ServerStats } from "@/lib/types";
 import {
   backendPortBindings,
   normalizeDockerRuntimeStats,
-} from "./docker";
+} from "./docker-helpers";
 
 function stats(overrides: Partial<ServerStats> = {}): ServerStats {
   return {
@@ -86,6 +86,18 @@ describe("backendPortBindings", () => {
     expect(backendPortBindings(dockerInstance("vanilla"))).toEqual({
       "42420/tcp": [{ HostPort: "42420" }],
       "42420/udp": [{ HostPort: "42420" }],
+    });
+  });
+
+  it("publishes GTA player ports and not txAdmin by default", () => {
+    const inst = dockerInstance("vanilla");
+    inst.game = "gta";
+    inst.serverEngine = "fxserver";
+    inst.port = 30120;
+
+    expect(backendPortBindings(inst)).toEqual({
+      "30120/tcp": [{ HostPort: "30120" }],
+      "30120/udp": [{ HostPort: "30120" }],
     });
   });
 });
