@@ -165,6 +165,44 @@ describe("GTA players", () => {
     });
   });
 
+  it("does not downgrade the canonical id when later heartbeats omit a stronger identifier", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const licenseAndSteam = bridgePlayer({
+      identifiers: [
+        { type: "license", value: "license:existing-license" },
+        { type: "steam", value: "steam:110000112345678" },
+      ],
+    });
+    const steamOnly = bridgePlayer({
+      identifiers: [{ type: "steam", value: "steam:110000112345678" }],
+    });
+
+    const joined = await recordGtaPlayerJoin(inst, licenseAndSteam, now);
+    await recordGtaPlayerAction(
+      inst,
+      { action: "warn", playerId: joined.player.id, reason: "Stay canonical" },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+    await recordGtaHeartbeat(inst, [steamOnly], now + 2);
+
+    const roster = await listGtaPlayers(inst, now + 3);
+
+    expect(joined.player.id).toBe(buildGtaPlayerId(licenseAndSteam));
+    expect(roster.players).toHaveLength(1);
+    expect(roster.players[0].id).toBe(buildGtaPlayerId(licenseAndSteam));
+    expect(roster.players[0].sessions).toHaveLength(1);
+    expect(roster.players[0].sessions[0].playerId).toBe(
+      buildGtaPlayerId(licenseAndSteam),
+    );
+    expect(roster.players[0].punishments).toHaveLength(1);
+    expect(roster.players[0].punishments[0]).toMatchObject({
+      playerId: buildGtaPlayerId(licenseAndSteam),
+      reason: "Stay canonical",
+    });
+  });
+
   it("records a closed session when a player drops", async () => {
     const inst = instance();
     const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);

@@ -226,15 +226,28 @@ function upsertBridgePlayer(
   bridgePlayer: GtaBridgePlayer,
   now: number,
 ): StoredGtaPlayer {
-  const id = buildGtaPlayerId(bridgePlayer);
   const identifiers = normalizeIdentifiers(bridgePlayer.identifiers);
+  const incomingId = buildGtaPlayerId({
+    name: bridgePlayer.name,
+    identifiers,
+  });
   const matchingPlayers = store.players.filter(
     (player) =>
-      player.id === id ||
+      player.id === incomingId ||
       durableIdentifiersOverlap(player.identifiers, identifiers),
   );
+  const mergedIdentifiers = matchingPlayers.reduce(
+    (merged, player) => mergeIdentifiers(merged, player.identifiers),
+    identifiers,
+  );
+  const id = buildGtaPlayerId({
+    name: bridgePlayer.name,
+    identifiers: mergedIdentifiers,
+  });
   const current =
-    matchingPlayers.find((player) => player.id === id) ?? matchingPlayers[0];
+    matchingPlayers.find((player) => player.id === id) ??
+    matchingPlayers.find((player) => player.id === incomingId) ??
+    matchingPlayers[0];
   if (current) {
     const oldIds = matchingPlayers.map((player) => player.id);
     if (current.id !== id) {
