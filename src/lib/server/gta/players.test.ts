@@ -567,7 +567,7 @@ describe("GTA players", () => {
   it("records a closed session when a player drops", async () => {
     const inst = instance();
     const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
-    const droppedAt = joinedAt + 180_000;
+    const droppedAt = joinedAt + 18_000;
 
     const joined = await recordGtaPlayerJoin(inst, bridgePlayer(), joinedAt);
     await recordGtaPlayerDrop(
@@ -586,7 +586,7 @@ describe("GTA players", () => {
     expect(roster.players[0].sessions[0]).toMatchObject({
       joinedAt,
       leftAt: droppedAt,
-      durationSeconds: 180,
+      durationSeconds: 18,
       dropReason: "Timed out",
     });
   });
@@ -716,6 +716,34 @@ describe("GTA players", () => {
       joinedAt: joinedAt + 60_000,
     });
     expect(rejoinedRoster.players[0].sessions[1].leftAt).toBeUndefined();
+  });
+
+  it("ignores late drops after heartbeat timeout closes the session", async () => {
+    const inst = instance();
+    const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const droppedAt = joinedAt + 31_000;
+
+    const joined = await recordGtaPlayerJoin(inst, bridgePlayer(), joinedAt);
+    await recordGtaPlayerDrop(
+      inst,
+      {
+        playerId: joined.player.id,
+        serverId: 7,
+        reason: "Late disconnect",
+      },
+      droppedAt,
+    );
+
+    const roster = await listGtaPlayers(inst, droppedAt + 1);
+
+    expect(roster.players[0].online).toBe(false);
+    expect(roster.players[0].sessions).toHaveLength(1);
+    expect(roster.players[0].sessions[0]).toMatchObject({
+      joinedAt,
+      leftAt: joinedAt,
+      durationSeconds: 0,
+      dropReason: "Heartbeat timed out",
+    });
   });
 
   it("requires reasons for warn and ban actions", async () => {

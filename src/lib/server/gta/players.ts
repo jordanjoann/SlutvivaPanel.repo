@@ -157,6 +157,7 @@ async function recordGtaPlayerDropUnlocked(
   now: number,
 ): Promise<void> {
   const store = await readStore(inst);
+  const staleChanged = closeStaleSessions(store, now);
   const inputPlayerId = input.playerId;
   const player =
     (inputPlayerId !== undefined
@@ -167,9 +168,18 @@ async function recordGtaPlayerDropUnlocked(
     (input.serverId !== undefined
       ? store.players.find((candidate) => candidate.serverId === input.serverId)
       : undefined);
-  if (!player) return;
-  if (!player.online) return;
+  if (!player || !isOnline(player, now)) {
+    if (staleChanged) {
+      await writeJsonFile(playersFile(inst), store.players);
+      await writeJsonFile(sessionsFile(inst), store.sessions);
+    }
+    return;
+  }
   if (input.serverId !== undefined && player.serverId !== input.serverId) {
+    if (staleChanged) {
+      await writeJsonFile(playersFile(inst), store.players);
+      await writeJsonFile(sessionsFile(inst), store.sessions);
+    }
     return;
   }
 
@@ -186,7 +196,13 @@ async function recordGtaPlayerDropUnlocked(
       return candidate.serverId === player.serverId;
     return true;
   });
-  if (!session) return;
+  if (!session) {
+    if (staleChanged) {
+      await writeJsonFile(playersFile(inst), store.players);
+      await writeJsonFile(sessionsFile(inst), store.sessions);
+    }
+    return;
+  }
 
   player.online = false;
   player.lastSeenAt = now;
