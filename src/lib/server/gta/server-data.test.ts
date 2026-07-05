@@ -193,6 +193,30 @@ describe("GTA server data", () => {
     expect(serverLua).not.toContain("print(bridgeToken)");
   });
 
+  it("generates GTA admin resource telemetry collection", async () => {
+    const { ensureGtaServerData } = await loadModule();
+    const inst = instance();
+
+    await ensureGtaServerData(inst, { cloneBaseResources: false });
+
+    const lua = await fs.readFile(
+      path.join(
+        inst.dataPath,
+        "resources",
+        "[slutvival]",
+        "slutvival-admin",
+        "server.lua",
+      ),
+      "utf8",
+    );
+    expect(lua).toContain("GetEntityCoords");
+    expect(lua).toContain("GetEntityHeading");
+    expect(lua).toContain("GetPedArmour");
+    expect(lua).toContain("GetVehiclePedIsIn");
+    expect(lua).toContain("GetVehicleNumberPlateText");
+    expect(lua).toContain("Wait(2000)");
+  });
+
   it("does not replace an existing bridge token", async () => {
     const { ensureGtaServerData, readGtaBridgeToken } = await loadModule();
     const inst = instance();

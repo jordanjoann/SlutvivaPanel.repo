@@ -82,4 +82,51 @@ describe("GTA bridge route", () => {
     expect(getSessionAccount).not.toHaveBeenCalled();
     expect(handleGtaBridgeEvent).toHaveBeenCalledWith(inst, event);
   });
+
+  it("passes telemetry heartbeat payloads to the bridge service", async () => {
+    const event = {
+      type: "heartbeat",
+      serverToken: "token",
+      players: [
+        {
+          serverId: 7,
+          name: "Bocephus",
+          pingMs: 44,
+          identifiers: [{ type: "license", value: "license:abc123" }],
+          position: { x: 10, y: 20, z: 30 },
+          heading: 270,
+          health: 199,
+          armour: 100,
+          vehicle: { inVehicle: false },
+        },
+      ],
+    };
+    const { POST } = await import("./route");
+
+    const response = await POST(bridgeRequest(event), params());
+
+    expect(response.status).toBe(200);
+    expect(handleGtaBridgeEvent).toHaveBeenCalledWith(gtaInstance(), event);
+  });
+
+  it("returns 400 for malformed telemetry rejected by the service", async () => {
+    handleGtaBridgeEvent.mockRejectedValueOnce(
+      new Error("Malformed GTA bridge payload: heartbeat players are required"),
+    );
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      bridgeRequest({
+        type: "heartbeat",
+        serverToken: "token",
+        players: [{ position: { x: "bad", y: 0, z: 0 } }],
+      }),
+      params(),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Malformed GTA bridge payload: heartbeat players are required",
+    });
+  });
 });

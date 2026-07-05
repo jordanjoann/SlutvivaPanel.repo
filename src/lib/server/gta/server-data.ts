@@ -61,12 +61,65 @@ local function collectIdentifiers(player)
   return identifiers
 end
 
+local function safeNumber(value)
+  if type(value) == "number" then
+    return value
+  end
+
+  return nil
+end
+
+local function collectPosition(ped)
+  if not ped or ped == 0 then
+    return nil
+  end
+
+  local coords = GetEntityCoords(ped)
+
+  if not coords then
+    return nil
+  end
+
+  return {
+    x = safeNumber(coords.x),
+    y = safeNumber(coords.y),
+    z = safeNumber(coords.z),
+  }
+end
+
+local function collectVehicle(ped)
+  if not ped or ped == 0 then
+    return nil
+  end
+
+  local vehicle = GetVehiclePedIsIn(ped, false)
+
+  if not vehicle or vehicle == 0 then
+    return {
+      inVehicle = false,
+    }
+  end
+
+  return {
+    inVehicle = true,
+    modelHash = GetEntityModel(vehicle),
+    plate = GetVehicleNumberPlateText(vehicle),
+  }
+end
+
 local function collectPlayer(player, playerName)
+  local ped = GetPlayerPed(player)
+
   return {
     serverId = tonumber(player),
     name = playerName or GetPlayerName(player) or "",
     pingMs = GetPlayerPing(player),
     identifiers = collectIdentifiers(player),
+    position = collectPosition(ped),
+    heading = ped and ped ~= 0 and GetEntityHeading(ped) or nil,
+    health = ped and ped ~= 0 and GetEntityHealth(ped) or nil,
+    armour = ped and ped ~= 0 and GetPedArmour(ped) or nil,
+    vehicle = collectVehicle(ped),
   }
 end
 
@@ -127,7 +180,7 @@ CreateThread(function()
       players = collectPlayers(),
     })
 
-    Wait(60000)
+    Wait(2000)
   end
 end)
 
