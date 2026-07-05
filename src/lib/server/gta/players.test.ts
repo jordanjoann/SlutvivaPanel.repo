@@ -309,6 +309,47 @@ describe("GTA players", () => {
     });
   });
 
+  it("accepts drops with a stale player id when the current server id matches", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const ipOnly = bridgePlayer({
+      serverId: 7,
+      name: "Temporary Identity",
+      identifiers: [{ type: "ip", value: "ip:203.0.113.9" }],
+    });
+    const licensed = bridgePlayer({
+      serverId: 7,
+      name: "Licensed Identity",
+      identifiers: [{ type: "license", value: "license:live-slot" }],
+    });
+
+    const joined = await recordGtaPlayerJoin(inst, ipOnly, now);
+    await recordGtaHeartbeat(inst, [licensed], now + 1);
+    await recordGtaPlayerDrop(
+      inst,
+      {
+        playerId: joined.player.id,
+        serverId: 7,
+        reason: "Disconnected",
+      },
+      now + 2,
+    );
+
+    const roster = await listGtaPlayers(inst, now + 3);
+
+    expect(roster.players).toHaveLength(1);
+    expect(roster.players[0]).toMatchObject({
+      id: buildGtaPlayerId(licensed),
+      online: false,
+    });
+    expect(roster.players[0].sessions).toHaveLength(1);
+    expect(roster.players[0].sessions[0]).toMatchObject({
+      playerId: buildGtaPlayerId(licensed),
+      leftAt: now + 2,
+      dropReason: "Disconnected",
+    });
+  });
+
   it("preserves concurrent joins for different durable players", async () => {
     const inst = instance();
     const now = Date.UTC(2026, 6, 5, 12, 0, 0);

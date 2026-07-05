@@ -156,11 +156,13 @@ async function recordGtaPlayerDropUnlocked(
   now: number,
 ): Promise<void> {
   const store = await readStore(inst);
-  const player = store.players.find((candidate) =>
-    input.playerId
-      ? candidate.id === input.playerId
-      : input.serverId !== undefined && candidate.serverId === input.serverId,
-  );
+  const player =
+    (input.playerId
+      ? store.players.find((candidate) => candidate.id === input.playerId)
+      : undefined) ??
+    (input.serverId !== undefined
+      ? store.players.find((candidate) => candidate.serverId === input.serverId)
+      : undefined);
   if (!player) return;
   if (!player.online) return;
   if (input.serverId !== undefined && player.serverId !== input.serverId) {
