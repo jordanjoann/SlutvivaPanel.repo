@@ -7,9 +7,11 @@ import type {
   GtaPlayerActionInput,
   GtaPlayerActionResult,
   GtaPlayerIdentifier,
+  GtaPlayerPosition,
   GtaPlayersPayload,
   GtaPlayerSession,
   GtaPlayerSummary,
+  GtaPlayerVehicle,
   GtaPunishment,
   Instance,
 } from "@/lib/types";
@@ -22,6 +24,11 @@ type StoredGtaPlayer = {
   online: boolean;
   serverId?: number;
   pingMs?: number;
+  position?: GtaPlayerPosition;
+  heading?: number;
+  health?: number;
+  armour?: number;
+  vehicle?: GtaPlayerVehicle;
   identifiers: GtaPlayerIdentifier[];
   firstSeenAt: number;
   lastSeenAt: number;
@@ -208,6 +215,7 @@ async function recordGtaPlayerDropUnlocked(
   player.lastSeenAt = now;
   delete player.serverId;
   delete player.pingMs;
+  clearLiveTelemetry(player);
 
   if (!session) {
     await writeJsonFile(playersFile(inst), store.players);
@@ -512,6 +520,7 @@ function upsertBridgePlayer(
     current.online = true;
     current.serverId = bridgePlayer.serverId;
     current.pingMs = bridgePlayer.pingMs;
+    assignLiveTelemetry(current, bridgePlayer);
     current.identifiers = mergeIdentifiers(current.identifiers, identifiers);
     addPlayerAliases(current, oldIds);
     current.lastSeenAt = now;
@@ -525,6 +534,11 @@ function upsertBridgePlayer(
     online: true,
     serverId: bridgePlayer.serverId,
     pingMs: bridgePlayer.pingMs,
+    position: bridgePlayer.position,
+    heading: bridgePlayer.heading,
+    health: bridgePlayer.health,
+    armour: bridgePlayer.armour,
+    vehicle: bridgePlayer.vehicle,
     identifiers,
     firstSeenAt: now,
     lastSeenAt: now,
@@ -532,6 +546,49 @@ function upsertBridgePlayer(
   };
   store.players.push(created);
   return { player: created, punishmentsChanged: false };
+}
+
+function assignLiveTelemetry(
+  player: StoredGtaPlayer,
+  bridgePlayer: GtaBridgePlayer,
+): void {
+  if (bridgePlayer.position !== undefined) {
+    player.position = bridgePlayer.position;
+  } else {
+    delete player.position;
+  }
+
+  if (bridgePlayer.heading !== undefined) {
+    player.heading = bridgePlayer.heading;
+  } else {
+    delete player.heading;
+  }
+
+  if (bridgePlayer.health !== undefined) {
+    player.health = bridgePlayer.health;
+  } else {
+    delete player.health;
+  }
+
+  if (bridgePlayer.armour !== undefined) {
+    player.armour = bridgePlayer.armour;
+  } else {
+    delete player.armour;
+  }
+
+  if (bridgePlayer.vehicle !== undefined) {
+    player.vehicle = bridgePlayer.vehicle;
+  } else {
+    delete player.vehicle;
+  }
+}
+
+function clearLiveTelemetry(player: StoredGtaPlayer): void {
+  delete player.position;
+  delete player.heading;
+  delete player.health;
+  delete player.armour;
+  delete player.vehicle;
 }
 
 function migrateRelatedPlayerIds(
@@ -652,6 +709,7 @@ function closeStaleSessions(store: GtaPlayerStore, now: number): boolean {
     player.online = false;
     delete player.serverId;
     delete player.pingMs;
+    clearLiveTelemetry(player);
     changed = true;
   }
   return changed;
@@ -687,6 +745,7 @@ function closeMissingHeartbeatPlayers(
     player.lastSeenAt = now;
     delete player.serverId;
     delete player.pingMs;
+    clearLiveTelemetry(player);
   }
 }
 
@@ -724,6 +783,7 @@ function closeOnlinePlayersReusingServerId(
     player.lastSeenAt = now;
     delete player.serverId;
     delete player.pingMs;
+    clearLiveTelemetry(player);
   }
 }
 
@@ -771,6 +831,12 @@ function playerSummary(
     online,
     serverId: online ? player.serverId : undefined,
     pingMs: online ? player.pingMs : undefined,
+    position: player.position,
+    heading: player.heading,
+    health: player.health,
+    armour: player.armour,
+    vehicle: player.vehicle,
+    lastHeartbeatAt: player.lastHeartbeatAt,
     identifiers: player.identifiers,
     firstSeenAt: player.firstSeenAt,
     lastSeenAt: player.lastSeenAt,
@@ -1000,6 +1066,11 @@ function isStoredGtaPlayer(value: unknown): value is StoredGtaPlayer {
     typeof value.online === "boolean" &&
     isOptionalFiniteNumber(value.serverId) &&
     isOptionalFiniteNumber(value.pingMs) &&
+    (value.position === undefined || isGtaPlayerPosition(value.position)) &&
+    (value.heading === undefined || isFiniteNumber(value.heading)) &&
+    (value.health === undefined || isNonNegativeFiniteNumber(value.health)) &&
+    (value.armour === undefined || isNonNegativeFiniteNumber(value.armour)) &&
+    (value.vehicle === undefined || isGtaPlayerVehicle(value.vehicle)) &&
     Array.isArray(value.identifiers) &&
     value.identifiers.every(isGtaPlayerIdentifier) &&
     isFiniteNumber(value.firstSeenAt) &&
@@ -1063,7 +1134,31 @@ function isGtaBridgePlayer(value: unknown): value is GtaBridgePlayer {
     typeof value.name === "string" &&
     isFiniteNumber(value.pingMs) &&
     Array.isArray(value.identifiers) &&
-    value.identifiers.every(isGtaPlayerIdentifier)
+    value.identifiers.every(isGtaPlayerIdentifier) &&
+    (value.position === undefined || isGtaPlayerPosition(value.position)) &&
+    (value.heading === undefined || isFiniteNumber(value.heading)) &&
+    (value.health === undefined || isNonNegativeFiniteNumber(value.health)) &&
+    (value.armour === undefined || isNonNegativeFiniteNumber(value.armour)) &&
+    (value.vehicle === undefined || isGtaPlayerVehicle(value.vehicle))
+  );
+}
+
+function isGtaPlayerPosition(value: unknown): value is GtaPlayerPosition {
+  return (
+    isPlainRecord(value) &&
+    isFiniteNumber(value.x) &&
+    isFiniteNumber(value.y) &&
+    isFiniteNumber(value.z)
+  );
+}
+
+function isGtaPlayerVehicle(value: unknown): value is GtaPlayerVehicle {
+  return (
+    isPlainRecord(value) &&
+    typeof value.inVehicle === "boolean" &&
+    (value.model === undefined || typeof value.model === "string") &&
+    (value.modelHash === undefined || isFiniteNumber(value.modelHash)) &&
+    (value.plate === undefined || typeof value.plate === "string")
   );
 }
 
@@ -1088,6 +1183,10 @@ function isOptionalString(value: unknown): boolean {
 
 function isOptionalFiniteNumber(value: unknown): boolean {
   return value === undefined || isFiniteNumber(value);
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0;
 }
 
 function isFiniteNumber(value: unknown): value is number {

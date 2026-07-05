@@ -1358,4 +1358,93 @@ describe("GTA players", () => {
       ),
     ).rejects.toThrow(/online player/i);
   });
+
+  it("stores live map telemetry from heartbeat players", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+
+    const roster = await recordGtaHeartbeat(
+      inst,
+      [
+        bridgePlayer({
+          position: { x: 101.25, y: -202.5, z: 33.75 },
+          heading: 91.5,
+          health: 187,
+          armour: 42,
+          vehicle: {
+            inVehicle: true,
+            model: "adder",
+            modelHash: 3078201489,
+            plate: "MAP001",
+          },
+        }),
+      ],
+      now,
+    );
+
+    expect(roster.players[0]).toMatchObject({
+      online: true,
+      position: { x: 101.25, y: -202.5, z: 33.75 },
+      heading: 91.5,
+      health: 187,
+      armour: 42,
+      vehicle: {
+        inVehicle: true,
+        model: "adder",
+        modelHash: 3078201489,
+        plate: "MAP001",
+      },
+      lastHeartbeatAt: now,
+    });
+  });
+
+  it("clears live map telemetry when a player drops", async () => {
+    const inst = instance();
+    const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const joined = await recordGtaPlayerJoin(
+      inst,
+      bridgePlayer({
+        position: { x: 10, y: 20, z: 30 },
+        heading: 180,
+        health: 160,
+        armour: 25,
+        vehicle: { inVehicle: false },
+      }),
+      joinedAt,
+    );
+
+    await recordGtaPlayerDrop(
+      inst,
+      { playerId: joined.player.id, serverId: 7, reason: "Quit" },
+      joinedAt + 10_000,
+    );
+
+    const roster = await listGtaPlayers(inst, joinedAt + 10_001);
+
+    expect(roster.players[0]).toMatchObject({ online: false });
+    expect(roster.players[0].position).toBeUndefined();
+    expect(roster.players[0].heading).toBeUndefined();
+    expect(roster.players[0].health).toBeUndefined();
+    expect(roster.players[0].armour).toBeUndefined();
+    expect(roster.players[0].vehicle).toBeUndefined();
+  });
+
+  it("rejects malformed live telemetry in bridge heartbeat payloads", async () => {
+    const inst = instance();
+    const token = "1".repeat(48);
+    await writeBridgeToken(inst, token);
+
+    await expect(
+      handleGtaBridgeEvent(inst, {
+        type: "heartbeat",
+        serverToken: token,
+        players: [
+          {
+            ...bridgePlayer(),
+            position: { x: "bad", y: 0, z: 0 },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/Malformed GTA bridge payload/i);
+  });
 });

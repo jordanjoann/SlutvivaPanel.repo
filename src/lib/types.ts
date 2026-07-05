@@ -288,11 +288,29 @@ export interface GtaPlayerIdentifier {
   value: string;
 }
 
+export interface GtaPlayerPosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface GtaPlayerVehicle {
+  inVehicle: boolean;
+  model?: string;
+  modelHash?: number;
+  plate?: string;
+}
+
 export interface GtaBridgePlayer {
   serverId: number;
   name: string;
   pingMs: number;
   identifiers: GtaPlayerIdentifier[];
+  position?: GtaPlayerPosition;
+  heading?: number;
+  health?: number;
+  armour?: number;
+  vehicle?: GtaPlayerVehicle;
 }
 
 export interface GtaPlayerSession {
@@ -329,6 +347,12 @@ export interface GtaPlayerSummary {
   online: boolean;
   serverId?: number;
   pingMs?: number;
+  position?: GtaPlayerPosition;
+  heading?: number;
+  health?: number;
+  armour?: number;
+  vehicle?: GtaPlayerVehicle;
+  lastHeartbeatAt?: number;
   identifiers: GtaPlayerIdentifier[];
   firstSeenAt: number;
   lastSeenAt: number;
