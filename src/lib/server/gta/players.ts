@@ -202,18 +202,20 @@ async function recordGtaPlayerDropUnlocked(
       return candidate.serverId === player.serverId;
     return true;
   });
-  if (!session) {
-    if (staleChanged) {
-      await writeJsonFile(playersFile(inst), store.players);
-      await writeJsonFile(sessionsFile(inst), store.sessions);
-    }
-    return;
-  }
 
   player.online = false;
   player.lastSeenAt = now;
   delete player.serverId;
   delete player.pingMs;
+
+  if (!session) {
+    await writeJsonFile(playersFile(inst), store.players);
+    if (staleChanged) {
+      await writeJsonFile(sessionsFile(inst), store.sessions);
+    }
+    return;
+  }
+
   normalizeSessionPlayerId(session, player);
   session.leftAt = now;
   session.durationSeconds = Math.max(
@@ -243,6 +245,10 @@ async function recordGtaPlayerActionUnlocked(
   actor: { id: string; username: string },
   now: number,
 ): Promise<GtaPlayerActionResult> {
+  if (!isGtaPlayerAction(input.action)) {
+    throw new Error("Invalid action");
+  }
+
   const store = await readStore(inst);
   const player = store.players.find((candidate) =>
     playerHasAssociatedId(candidate, input.playerId),
@@ -765,6 +771,12 @@ function liveKickCommandForAction(
   if (action === "kick")
     return buildGtaKickCommand(player.serverId, reason || "Kicked");
   return undefined;
+}
+
+function isGtaPlayerAction(
+  value: unknown,
+): value is GtaPlayerActionInput["action"] {
+  return value === "kick" || value === "warn" || value === "ban";
 }
 
 function normalizeIdentifiers(

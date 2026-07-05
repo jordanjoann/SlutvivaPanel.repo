@@ -598,6 +598,36 @@ describe("GTA players", () => {
     });
   });
 
+  it("clears online state when a dropped player has no open session", async () => {
+    const inst = instance();
+    const joinedAt = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const droppedAt = joinedAt + 1_000;
+
+    const joined = await recordGtaPlayerJoin(inst, bridgePlayer(), joinedAt);
+    await fs.writeFile(
+      path.join(inst.dataPath, "slutvival", "sessions.json"),
+      "[]\n",
+      "utf8",
+    );
+
+    await recordGtaPlayerDrop(
+      inst,
+      {
+        playerId: joined.player.id,
+        serverId: 7,
+        reason: "Missing session",
+      },
+      droppedAt,
+    );
+
+    const roster = await listGtaPlayers(inst, droppedAt + 1);
+
+    expect(roster.players[0].online).toBe(false);
+    expect(roster.players[0].serverId).toBeUndefined();
+    expect(roster.players[0].pingMs).toBeUndefined();
+    expect(roster.players[0].sessions).toHaveLength(0);
+  });
+
   it("closes online players missing from heartbeat before a reused server id can be targeted", async () => {
     const inst = instance();
     const now = Date.UTC(2026, 6, 5, 12, 0, 0);
@@ -884,6 +914,32 @@ describe("GTA players", () => {
     expect(result.punishment.active).toBe(true);
     expect(result.liveCommand).toContain("slutvival_kick 7");
     expect(result.liveCommand).toContain("Banned: Repeated RDM");
+  });
+
+  it("rejects invalid runtime actions without writing punishments", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const joined = await recordGtaPlayerJoin(inst, bridgePlayer(), now);
+    const invalidInput = {
+      action: "mute",
+      playerId: joined.player.id,
+      reason: "Nope",
+    } as unknown as GtaPlayerActionInput;
+
+    await expect(
+      recordGtaPlayerAction(
+        inst,
+        invalidInput,
+        { id: "u_owner", username: "Owner" },
+        now + 1,
+      ),
+    ).rejects.toThrow(/invalid action/i);
+    await expect(
+      fs.readFile(
+        path.join(inst.dataPath, "slutvival", "punishments.json"),
+        "utf8",
+      ),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rejects actions when punishments storage is corrupt without overwriting it", async () => {
