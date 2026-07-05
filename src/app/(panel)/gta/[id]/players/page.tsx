@@ -177,6 +177,7 @@ export default function GtaPlayersPage() {
             title={`${filteredPlayers.length} players`}
             description={`${data?.onlineCount ?? 0} online, ${data?.offlineCount ?? 0} offline`}
             icon={UsersIcon}
+            action={data ? <BridgeStatus bridge={data.bridge} /> : undefined}
             bodyClassName="p-0"
           >
             <div className="grid gap-3 border-b border-border p-3">
@@ -210,7 +211,7 @@ export default function GtaPlayersPage() {
             </div>
 
             {filteredPlayers.length === 0 ? (
-              <EmptyBlock>No matching players.</EmptyBlock>
+              <EmptyBlock>{leftPaneEmptyMessage(players, filter, query)}</EmptyBlock>
             ) : (
               <div className="divide-y divide-border">
                 {filteredPlayers.map((player) => (
@@ -549,6 +550,36 @@ function StatusBadge({ online }: { online: boolean }) {
       {online ? "Online" : "Offline"}
     </Badge>
   );
+}
+
+function BridgeStatus({
+  bridge,
+}: {
+  bridge: { online: boolean; lastHeartbeatAt?: number };
+}) {
+  return (
+    <div className="grid justify-items-end gap-1">
+      <Badge variant={bridge.online ? "default" : "outline"}>
+        {bridge.online ? "Bridge online" : "Bridge offline"}
+      </Badge>
+      {bridge.lastHeartbeatAt && (
+        <span className="text-xs text-muted-foreground">
+          Last heartbeat {formatRelative(bridge.lastHeartbeatAt)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function leftPaneEmptyMessage(
+  players: GtaPlayerSummary[],
+  filter: GtaPlayerFilter,
+  query: string,
+) {
+  if (players.length === 0) return "No GTA players tracked yet.";
+  if (!query.trim() && filter === "online") return "No players online.";
+  if (!query.trim() && filter === "offline") return "No offline players tracked yet.";
+  return "No matching players.";
 }
 
 function EmptyBlock({ children }: { children: React.ReactNode }) {
