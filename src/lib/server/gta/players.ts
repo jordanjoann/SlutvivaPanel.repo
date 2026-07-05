@@ -30,11 +30,16 @@ type GtaPlayerStore = {
   players: StoredGtaPlayer[];
   sessions: GtaPlayerSession[];
   punishments: GtaPunishment[];
+  bridge: GtaBridgeState;
 };
 
 type UpsertGtaPlayerResult = {
   player: StoredGtaPlayer;
   punishmentsChanged: boolean;
+};
+
+type GtaBridgeState = {
+  lastHeartbeatAt?: number;
 };
 
 const ONLINE_WINDOW_MS = 30_000;
@@ -66,6 +71,7 @@ export async function recordGtaHeartbeat(
   now = Date.now(),
 ): Promise<GtaPlayersPayload> {
   const store = await readStore(inst);
+  store.bridge.lastHeartbeatAt = now;
   closeStaleSessions(store, now);
   let punishmentsChanged = false;
   for (const player of players) {
@@ -75,6 +81,7 @@ export async function recordGtaHeartbeat(
   }
   await writeJsonFile(playersFile(inst), store.players);
   await writeJsonFile(sessionsFile(inst), store.sessions);
+  await writeJsonFile(bridgeFile(inst), store.bridge);
   if (punishmentsChanged) {
     await writeJsonFile(punishmentsFile(inst), store.punishments);
   }
@@ -229,12 +236,13 @@ export function buildGtaKickCommand(serverId: number, reason: string): string {
 }
 
 async function readStore(inst: Instance): Promise<GtaPlayerStore> {
-  const [players, sessions, punishments] = await Promise.all([
+  const [players, sessions, punishments, bridge] = await Promise.all([
     readJsonArray<StoredGtaPlayer>(playersFile(inst), isStoredGtaPlayer),
     readJsonArray<GtaPlayerSession>(sessionsFile(inst), isGtaPlayerSession),
     readJsonArray<GtaPunishment>(punishmentsFile(inst), isGtaPunishment),
+    readJsonObject<GtaBridgeState>(bridgeFile(inst), isGtaBridgeState),
   ]);
-  return { players, sessions, punishments };
+  return { players, sessions, punishments, bridge: bridge ?? {} };
 }
 
 function upsertBridgePlayer(
@@ -396,10 +404,7 @@ function playersPayload(store: GtaPlayerStore, now: number): GtaPlayersPayload {
       return a.name.localeCompare(b.name);
     });
   const onlineCount = players.filter((player) => player.online).length;
-  const lastHeartbeatAt = Math.max(
-    0,
-    ...store.players.map((player) => player.lastHeartbeatAt ?? 0),
-  );
+  const lastHeartbeatAt = store.bridge.lastHeartbeatAt;
 
   return {
     players,
@@ -407,8 +412,10 @@ function playersPayload(store: GtaPlayerStore, now: number): GtaPlayersPayload {
     offlineCount: players.length - onlineCount,
     punishmentCount: store.punishments.length,
     bridge: {
-      lastHeartbeatAt: lastHeartbeatAt > 0 ? lastHeartbeatAt : undefined,
-      online: lastHeartbeatAt > 0 && now - lastHeartbeatAt <= ONLINE_WINDOW_MS,
+      lastHeartbeatAt,
+      online:
+        lastHeartbeatAt !== undefined &&
+        now - lastHeartbeatAt <= ONLINE_WINDOW_MS,
     },
   };
 }
@@ -540,6 +547,19 @@ async function readJsonArray<T>(
   }
 }
 
+async function readJsonObject<T>(
+  file: string,
+  guard: (value: unknown) => value is T,
+): Promise<T | null> {
+  try {
+    const raw = await fs.readFile(file, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    return guard(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 async function writeJsonFile(file: string, value: unknown): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = path.join(
@@ -560,6 +580,10 @@ function sessionsFile(inst: Instance): string {
 
 function punishmentsFile(inst: Instance): string {
   return path.join(storageDir(inst), "punishments.json");
+}
+
+function bridgeFile(inst: Instance): string {
+  return path.join(storageDir(inst), "bridge.json");
 }
 
 function storageDir(inst: Instance): string {
@@ -623,6 +647,14 @@ function isGtaPlayerIdentifier(value: unknown): value is GtaPlayerIdentifier {
       ] as string[]
     ).includes(value.type) &&
     typeof value.value === "string"
+  );
+}
+
+function isGtaBridgeState(value: unknown): value is GtaBridgeState {
+  if (!isRecord(value)) return false;
+  return (
+    value.lastHeartbeatAt === undefined ||
+    typeof value.lastHeartbeatAt === "number"
   );
 }
 

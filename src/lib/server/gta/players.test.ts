@@ -72,6 +72,29 @@ afterEach(async () => {
 });
 
 describe("GTA players", () => {
+  it("tracks empty bridge heartbeats independently of player heartbeats", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+
+    const heartbeat = await recordGtaHeartbeat(inst, [], now);
+    const freshRoster = await listGtaPlayers(inst, now + 29_000);
+    const expiredRoster = await listGtaPlayers(inst, now + 31_000);
+
+    expect(heartbeat.players).toHaveLength(0);
+    expect(heartbeat.bridge).toEqual({
+      lastHeartbeatAt: now,
+      online: true,
+    });
+    expect(freshRoster.bridge).toEqual({
+      lastHeartbeatAt: now,
+      online: true,
+    });
+    expect(expiredRoster.bridge).toEqual({
+      lastHeartbeatAt: now,
+      online: false,
+    });
+  });
+
   it("merges heartbeat players with tracked offline players", async () => {
     const inst = instance();
     const now = Date.UTC(2026, 6, 5, 12, 0, 0);
