@@ -1,4 +1,4 @@
-import Docker from "dockerode";
+import type Docker from "dockerode";
 import type {
   DiscordRoute,
   DiscordRouteKind,
@@ -54,8 +54,11 @@ const KIND_BY_CODE: Record<string, DiscordRouteKind> = {
 
 let dockerClient: Docker | null = null;
 
-function docker(): Docker {
-  if (!dockerClient) dockerClient = new Docker({ socketPath: config.docker.socket });
+async function docker(): Promise<Docker> {
+  if (!dockerClient) {
+    const { default: DockerClient } = await import("dockerode");
+    dockerClient = new DockerClient({ socketPath: config.docker.socket });
+  }
   return dockerClient;
 }
 
@@ -135,7 +138,7 @@ async function getCredentials(): Promise<DiscordCredentials | null> {
 
 async function inspectPlatformEnv(): Promise<Record<string, string>> {
   try {
-    const info = await docker().getContainer(PLATFORM_CONTAINER).inspect();
+    const info = await (await docker()).getContainer(PLATFORM_CONTAINER).inspect();
     const entries = info.Config?.Env ?? [];
     return Object.fromEntries(
       entries.map((entry) => {
@@ -150,7 +153,7 @@ async function inspectPlatformEnv(): Promise<Record<string, string>> {
 
 async function getPlatformState(): Promise<PlatformState> {
   try {
-    const container = docker().getContainer(PLATFORM_CONTAINER);
+    const container = (await docker()).getContainer(PLATFORM_CONTAINER);
     const [inspect, logs] = await Promise.all([
       container.inspect(),
       container.logs({ stdout: true, stderr: true, tail: 200 }),
@@ -183,7 +186,7 @@ async function readRoutes(): Promise<PlatformRoute[]> {
 }
 
 async function dockerExec(cmd: string[]): Promise<string> {
-  const container = docker().getContainer(PLATFORM_CONTAINER);
+  const container = (await docker()).getContainer(PLATFORM_CONTAINER);
   const exec = await container.exec({
     Cmd: cmd,
     AttachStdout: true,

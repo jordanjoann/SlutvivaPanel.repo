@@ -1,5 +1,5 @@
 import type { Duplex } from "node:stream";
-import Docker from "dockerode";
+import type Docker from "dockerode";
 import type { Instance, Player, ServerStats, ServerStatus } from "@/lib/types";
 import { config } from "../config";
 import { consoleBus } from "../console-bus";
@@ -26,15 +26,18 @@ export {
 } from "./docker-helpers";
 
 let dockerClient: Docker | null = null;
-function docker(): Docker {
-  if (!dockerClient) dockerClient = new Docker({ socketPath: config.docker.socket });
+async function docker(): Promise<Docker> {
+  if (!dockerClient) {
+    const { default: DockerClient } = await import("dockerode");
+    dockerClient = new DockerClient({ socketPath: config.docker.socket });
+  }
   return dockerClient;
 }
 
 /** Cheap availability probe used by the runtime factory. */
 export async function dockerAvailable(): Promise<boolean> {
   try {
-    await docker().ping();
+    await (await docker()).ping();
     return true;
   } catch {
     return false;
@@ -88,8 +91,8 @@ export class DockerRuntime implements Runtime {
     };
   }
 
-  private container() {
-    return docker().getContainer(this.instance.docker.containerName);
+  private async container() {
+    return (await docker()).getContainer(this.instance.docker.containerName);
   }
 
   private image() {
@@ -107,7 +110,7 @@ export class DockerRuntime implements Runtime {
 
   async refresh() {
     try {
-      const info = (await this.container().inspect()) as DockerInspect;
+      const info = (await (await this.container()).inspect()) as DockerInspect;
       this.status = info.State.Restarting
         ? "starting"
         : info.State.Running
@@ -125,7 +128,7 @@ export class DockerRuntime implements Runtime {
 
   private async attachLogs() {
     try {
-      const stream = (await this.container().logs({
+      const stream = (await (await this.container()).logs({
         follow: true,
         stdout: true,
         stderr: true,
@@ -149,12 +152,12 @@ export class DockerRuntime implements Runtime {
   async start() {
     this.status = "starting";
     await this.ensureContainer();
-    const info = (await this.container().inspect()) as DockerInspect;
+    const info = (await (await this.container()).inspect()) as DockerInspect;
     if (info.State.Running && !info.State.Restarting) {
       this.status = "running";
       return;
     }
-    await this.container().start();
+    await (await this.container()).start();
     this.startedAt = Date.now();
     this.status = "running";
     await this.attachLogs();
@@ -163,7 +166,7 @@ export class DockerRuntime implements Runtime {
   async stop() {
     this.status = "stopping";
     try {
-      await this.container().stop({ t: 15 });
+      await (await this.container()).stop({ t: 15 });
     } catch (e) {
       if (!isDockerNotFound(e) && !isDockerNotModified(e)) throw e;
     }
@@ -175,13 +178,13 @@ export class DockerRuntime implements Runtime {
   async restart() {
     this.status = "restarting";
     await this.ensureContainer();
-    await this.container().restart({ t: 15 });
+    await (await this.container()).restart({ t: 15 });
     this.status = "running";
   }
 
   async kill() {
     try {
-      await this.container().kill();
+      await (await this.container()).kill();
     } catch (e) {
       if (!isDockerNotFound(e) && !isDockerNotModified(e)) throw e;
     }
@@ -195,7 +198,7 @@ export class DockerRuntime implements Runtime {
     consoleBus.push(this.instance.id, normalized, "command");
     try {
       if (!this.stdin) {
-        const stream = (await this.container().attach({
+        const stream = (await (await this.container()).attach({
           stream: true,
           stdin: true,
           stdout: false,
@@ -226,7 +229,7 @@ export class DockerRuntime implements Runtime {
       return;
     }
     try {
-      const s = (await this.container().stats({ stream: false })) as unknown as {
+      const s = (await (await this.container()).stats({ stream: false })) as unknown as {
         cpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number; online_cpus: number };
         precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
         memory_stats: { usage: number; limit: number };
@@ -291,7 +294,7 @@ export class DockerRuntime implements Runtime {
     await ensureInstanceDockerFiles(this.instance);
     const port = String(this.instance.port);
     const portBindings = backendPortBindings(this.instance);
-    await docker().createContainer({
+    await (await docker()).createContainer({
       name: this.instance.docker.containerName,
       Image: this.image(),
       WorkingDir: this.instance.game === "gta" ? "/server-data" : "/server",
@@ -327,7 +330,7 @@ export class DockerRuntime implements Runtime {
 
   private async inspectContainer(): Promise<DockerInspect | null> {
     try {
-      return (await this.container().inspect()) as DockerInspect;
+      return (await (await this.container()).inspect()) as DockerInspect;
     } catch (e) {
       if (isDockerNotFound(e)) return null;
       throw e;
@@ -352,8 +355,8 @@ export class DockerRuntime implements Runtime {
   private async removeContainer() {
     try {
       const info = await this.inspectContainer();
-      if (info?.State.Running) await this.container().stop({ t: 15 });
-      await this.container().remove({ force: true });
+      if (info?.State.Running) await (await this.container()).stop({ t: 15 });
+      await (await this.container()).remove({ force: true });
     } catch (e) {
       if (!isDockerNotFound(e)) throw e;
     }
@@ -361,14 +364,14 @@ export class DockerRuntime implements Runtime {
 
   private async ensureImage() {
     try {
-      await docker().getImage(this.image()).inspect();
+      await (await docker()).getImage(this.image()).inspect();
       return;
     } catch (e) {
       if (!isDockerNotFound(e)) throw e;
     }
 
     if (this.instance.game === "gta") {
-      await ensureFxServerBaseImage(docker(), this.image(), (message) =>
+      await ensureFxServerBaseImage(await docker(), this.image(), (message) =>
         consoleBus.push(this.instance.id, message, "system"),
       );
       return;
@@ -379,9 +382,10 @@ export class DockerRuntime implements Runtime {
       `Pulling Docker image ${this.image()}...`,
       "system",
     );
-    const stream = await docker().pull(this.image());
+    const client = await docker();
+    const stream = await client.pull(this.image());
     await new Promise<void>((resolve, reject) => {
-      docker().modem.followProgress(stream, (err: Error | null) => {
+      client.modem.followProgress(stream, (err: Error | null) => {
         if (err) reject(err);
         else resolve();
       });
