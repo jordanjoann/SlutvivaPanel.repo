@@ -33,6 +33,29 @@ describe("GTA map view helpers", () => {
     ]);
   });
 
+  it("excludes online players with non-finite positions", () => {
+    const valid = player({
+      id: "gta_1",
+      name: "Nova",
+      online: true,
+      position: { x: 100, y: 200, z: 30 },
+    });
+    const invalidX = player({
+      id: "gta_2",
+      name: "Invalid X",
+      online: true,
+      position: { x: Number.NaN, y: 200, z: 30 },
+    });
+    const invalidY = player({
+      id: "gta_3",
+      name: "Invalid Y",
+      online: true,
+      position: { x: 100, y: Number.POSITIVE_INFINITY, z: 30 },
+    });
+
+    expect(mappedGtaPlayers([valid, invalidX, invalidY])).toEqual([valid]);
+  });
+
   it("projects GTA coordinates into clamped map percentages", () => {
     expect(projectGtaPosition({ x: 0, y: 2000, z: 25 })).toEqual({
       xPercent: 50,
@@ -50,12 +73,14 @@ describe("GTA map view helpers", () => {
     );
     expect(formatGtaHealth(undefined)).toBe("Unknown");
     expect(formatGtaHealth(187)).toBe("187");
+    expect(formatGtaHealth(187.6)).toBe("188");
     expect(formatGtaVehicle(undefined)).toBe("On foot");
     expect(formatGtaVehicle({ inVehicle: false })).toBe("On foot");
     expect(formatGtaVehicle({ inVehicle: true, model: "adder" })).toBe("adder");
     expect(formatGtaVehicle({ inVehicle: true, modelHash: 123 })).toBe(
       "Vehicle 123",
     );
+    expect(formatGtaVehicle({ inVehicle: true })).toBe("In vehicle");
   });
 });
 
