@@ -16,6 +16,7 @@ import type {
 
 type StoredGtaPlayer = {
   id: string;
+  aliases?: string[];
   name: string;
   online: boolean;
   serverId?: number;
@@ -278,7 +279,7 @@ async function findActiveGtaBanUnlocked(
           normalized.includes(key),
         ),
       )
-      .map((player) => player.id),
+      .flatMap(playerIdsForAssociations),
   );
   return (
     store.punishments.find(
@@ -368,12 +369,14 @@ function upsertBridgePlayer(
     matchingPlayers.find((player) => player.id === incomingId) ??
     matchingPlayers[0];
   if (current) {
-    const oldIds = matchingPlayers.map((player) => player.id);
+    const oldIds = matchingPlayers.flatMap(playerIdsForAssociations);
     if (current.id !== id) {
+      addPlayerAliases(current, [current.id]);
       current.id = id;
     }
     for (const matched of matchingPlayers) {
       if (matched === current) continue;
+      addPlayerAliases(current, playerIdsForAssociations(matched));
       current.identifiers = mergeIdentifiers(
         current.identifiers,
         matched.identifiers,
@@ -402,6 +405,7 @@ function upsertBridgePlayer(
     current.serverId = bridgePlayer.serverId;
     current.pingMs = bridgePlayer.pingMs;
     current.identifiers = mergeIdentifiers(current.identifiers, identifiers);
+    addPlayerAliases(current, oldIds);
     current.lastSeenAt = now;
     current.lastHeartbeatAt = now;
     return { player: current, punishmentsChanged };
@@ -461,7 +465,10 @@ function ensureOpenSession(
     return;
   }
   sessions.push({
-    id: buildRecordId("gta_session", `${player.id}:${now}`),
+    id: buildRecordId(
+      "gta_session",
+      `${player.id}:${player.serverId ?? ""}:${now}:${crypto.randomUUID()}`,
+    ),
     playerId: player.id,
     name: player.name,
     serverId: player.serverId,
@@ -551,8 +558,9 @@ function playerSummary(
   punishments: GtaPunishment[],
   now: number,
 ): GtaPlayerSummary {
-  const playerSessions = sessions.filter(
-    (session) => session.playerId === player.id,
+  const playerIds = new Set(playerIdsForAssociations(player));
+  const playerSessions = sessions.filter((session) =>
+    playerIds.has(session.playerId),
   );
   const online = isOnline(player, now);
   return {
@@ -566,10 +574,24 @@ function playerSummary(
     lastSeenAt: player.lastSeenAt,
     totalPlaytimeSeconds: totalPlaytimeSeconds(playerSessions, online, now),
     sessions: playerSessions,
-    punishments: punishments.filter(
-      (punishment) => punishment.playerId === player.id,
+    punishments: punishments.filter((punishment) =>
+      playerIds.has(punishment.playerId),
     ),
   };
+}
+
+function playerIdsForAssociations(player: StoredGtaPlayer): string[] {
+  return [...new Set([player.id, ...(player.aliases ?? [])])];
+}
+
+function addPlayerAliases(player: StoredGtaPlayer, ids: string[]): void {
+  const aliases = new Set(player.aliases ?? []);
+  for (const id of ids) {
+    if (id !== player.id) aliases.add(id);
+  }
+  if (aliases.size > 0) {
+    player.aliases = [...aliases];
+  }
 }
 
 function totalPlaytimeSeconds(
@@ -724,6 +746,9 @@ function isStoredGtaPlayer(value: unknown): value is StoredGtaPlayer {
   if (!isRecord(value)) return false;
   return (
     typeof value.id === "string" &&
+    (value.aliases === undefined ||
+      (Array.isArray(value.aliases) &&
+        value.aliases.every((alias) => typeof alias === "string"))) &&
     typeof value.name === "string" &&
     typeof value.online === "boolean" &&
     Array.isArray(value.identifiers) &&

@@ -212,6 +212,56 @@ describe("GTA players", () => {
     });
   });
 
+  it("associates old-id punishments through player aliases after partial migration", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+    const steamOnly = bridgePlayer({
+      identifiers: [{ type: "steam", value: "steam:110000112345678" }],
+    });
+    const licenseAndSteam = bridgePlayer({
+      identifiers: [
+        { type: "license", value: "license:partial-license" },
+        { type: "steam", value: "steam:110000112345678" },
+      ],
+    });
+
+    const joined = await recordGtaPlayerJoin(inst, steamOnly, now);
+    await recordGtaPlayerAction(
+      inst,
+      { action: "ban", playerId: joined.player.id, reason: "Partial ban" },
+      { id: "u_owner", username: "Owner" },
+      now + 1,
+    );
+
+    const playersFile = path.join(inst.dataPath, "slutvival", "players.json");
+    const players = JSON.parse(await fs.readFile(playersFile, "utf8"));
+    players[0] = {
+      ...players[0],
+      id: buildGtaPlayerId(licenseAndSteam),
+      aliases: [joined.player.id],
+      identifiers: licenseAndSteam.identifiers,
+    };
+    await fs.writeFile(playersFile, `${JSON.stringify(players, null, 2)}\n`);
+
+    const roster = await listGtaPlayers(inst, now + 2);
+    const licenseBan = await findActiveGtaBan(inst, [
+      { type: "license", value: "license:partial-license" },
+    ]);
+    const steamBan = await findActiveGtaBan(inst, [
+      { type: "steam", value: "steam:110000112345678" },
+    ]);
+
+    expect(roster.players).toHaveLength(1);
+    expect(roster.players[0].id).toBe(buildGtaPlayerId(licenseAndSteam));
+    expect(roster.players[0].punishments).toHaveLength(1);
+    expect(roster.players[0].punishments[0]).toMatchObject({
+      playerId: joined.player.id,
+      reason: "Partial ban",
+    });
+    expect(licenseBan?.reason).toBe("Partial ban");
+    expect(steamBan?.reason).toBe("Partial ban");
+  });
+
   it("does not downgrade the canonical id when later heartbeats omit a stronger identifier", async () => {
     const inst = instance();
     const now = Date.UTC(2026, 6, 5, 12, 0, 0);
@@ -491,6 +541,20 @@ describe("GTA players", () => {
       leftAt: droppedAt,
       dropReason: "Current drop",
     });
+  });
+
+  it("creates distinct session ids for same-millisecond server id changes", async () => {
+    const inst = instance();
+    const now = Date.UTC(2026, 6, 5, 12, 0, 0);
+
+    await recordGtaPlayerJoin(inst, bridgePlayer({ serverId: 7 }), now);
+    await recordGtaHeartbeat(inst, [bridgePlayer({ serverId: 12 })], now);
+
+    const roster = await listGtaPlayers(inst, now + 1);
+    const sessionIds = roster.players[0].sessions.map((session) => session.id);
+
+    expect(roster.players[0].sessions).toHaveLength(2);
+    expect(new Set(sessionIds).size).toBe(2);
   });
 
   it("closes stale heartbeat sessions before counting offline time", async () => {
