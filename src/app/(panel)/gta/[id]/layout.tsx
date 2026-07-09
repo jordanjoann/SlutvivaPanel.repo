@@ -16,6 +16,7 @@ const TABS = [
   { key: "console", label: "Console", segment: "console" },
   { key: "players", label: "Players", segment: "players" },
   { key: "map", label: "Map", segment: "map" },
+  { key: "clothing", label: "Clothing", segment: "clothing" },
   { key: "files", label: "Files", segment: "files" },
   { key: "settings", label: "Settings", segment: "settings" },
 ] as const;

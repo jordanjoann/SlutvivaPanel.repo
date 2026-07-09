@@ -19,6 +19,12 @@ import type {
   VintageStoryNetworkStatus,
   WorldInfo,
 } from "./types";
+import type {
+  ClothingAuditPayload,
+  ClothingAuditTag,
+  ClothingLibraryPayload,
+  ClothingTarget,
+} from "./gta-clothing";
 
 /* ------------------------------------------------------------------ */
 /* Low-level helpers                                                  */
@@ -104,6 +110,46 @@ export const api = {
   },
 
   gta: {
+    clothing: {
+      list: (id: string) =>
+        fetcher<ClothingLibraryPayload>(`/api/instances/${id}/gta/clothing`),
+      audit: {
+        list: (id: string) =>
+          fetcher<ClothingAuditPayload>(`/api/instances/${id}/gta/clothing/audit`),
+        decide: (id: string, itemId: string, tag: ClothingAuditTag) =>
+          send<ClothingAuditPayload>(`/api/instances/${id}/gta/clothing/audit`, "POST", {
+            itemId,
+            tag,
+          }),
+      },
+      decide: (id: string, assetId: string, target: ClothingTarget, notes?: string) =>
+        send<ClothingLibraryPayload>(`/api/instances/${id}/gta/clothing`, "POST", {
+          assetId,
+          target,
+          notes,
+        }),
+      clear: (id: string, assetId: string) =>
+        send<ClothingLibraryPayload>(
+          `/api/instances/${id}/gta/clothing?assetId=${encodeURIComponent(assetId)}`,
+          "DELETE",
+        ),
+      upload: async (id: string, files: FileList | File[]) => {
+        const form = new FormData();
+        for (const file of Array.from(files)) form.append("files", file);
+        const res = await fetch(`/api/instances/${id}/gta/clothing/upload`, {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) {
+          const b = await res.json().catch(() => ({}));
+          throw new ApiError(b.error ?? "Upload failed", res.status, b.detail);
+        }
+        return res.json() as Promise<{
+          uploaded: { fileName: string; relativePath: string; size: number }[];
+          library: ClothingLibraryPayload;
+        }>;
+      },
+    },
     players: {
       list: (id: string) =>
         fetcher<GtaPlayersPayload>(`/api/instances/${id}/gta/players`),

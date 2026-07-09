@@ -81,13 +81,16 @@ export default function GtaPlayersPage() {
     { refreshInterval: 3000 },
   );
 
-  const players = data?.players ?? [];
-  const filteredPlayers = filterGtaPlayers(players, filter, query);
-  const selected = players.find((player) => player.id === selectedId) ?? null;
-
-  React.useEffect(() => {
-    setSelectedId((currentId) => initialGtaPlayerId(players, currentId));
-  }, [players]);
+  const players = React.useMemo(() => data?.players ?? [], [data?.players]);
+  const filteredPlayers = React.useMemo(
+    () => filterGtaPlayers(players, filter, query),
+    [players, filter, query],
+  );
+  const activeSelectedId = React.useMemo(
+    () => initialGtaPlayerId(players, selectedId),
+    [players, selectedId],
+  );
+  const selected = players.find((player) => player.id === activeSelectedId) ?? null;
 
   function closeReasonDialog() {
     setReasonTarget(null);
@@ -226,7 +229,7 @@ export default function GtaPlayersPage() {
                   <PlayerRow
                     key={player.id}
                     player={player}
-                    selected={player.id === selectedId}
+                    selected={player.id === selected?.id}
                     onSelect={() => setSelectedId(player.id)}
                   />
                 ))}

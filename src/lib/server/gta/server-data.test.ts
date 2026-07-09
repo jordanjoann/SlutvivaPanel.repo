@@ -160,6 +160,16 @@ describe("GTA server data", () => {
     expect(cfg.indexOf("ensure slutvival-admin")).toBeGreaterThan(
       cfg.indexOf("exec server.secret.cfg"),
     );
+    expect(cfg).toContain("ensure oxmysql");
+    expect(cfg).toContain("ensure qb-core");
+    expect(cfg).toContain("ensure [qb]");
+    expect(cfg).toContain("ensure [standalone]");
+    expect(cfg).toContain("ensure [voice]");
+    expect(cfg).toContain("ensure slutvival-ui");
+    expect(cfg).toContain("ensure slutvival-alive");
+    expect(cfg).toContain("ensure slutvival-clothing-audit");
+    expect(cfg).toContain("add_principal group.admin rd-npcs.admin");
+    expect(cfg).not.toContain("ensure basic-gamemode");
     expect(cfg).toContain('set slutvival_panel_url "http://slutvival-panel:3000"');
     expect(cfg).toContain('set slutvival_panel_server_id "los-santos"');
   });
