@@ -133,6 +133,12 @@ export const api = {
           `/api/instances/${id}/gta/clothing?assetId=${encodeURIComponent(assetId)}`,
           "DELETE",
         ),
+      render: (id: string, force = false) =>
+        send<ClothingLibraryPayload>(
+          `/api/instances/${id}/gta/clothing/render`,
+          "POST",
+          { force },
+        ),
       upload: async (id: string, files: FileList | File[]) => {
         const form = new FormData();
         for (const file of Array.from(files)) form.append("files", file);

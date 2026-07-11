@@ -29,8 +29,9 @@ export async function GET(req: Request, { params }: Ctx) {
 
     const assetId = new URL(req.url).searchParams.get("assetId");
     if (!assetId) return badRequest("A clothing asset id is required");
+    const variantId = new URL(req.url).searchParams.get("variant");
 
-    const preview = await readClothingPreview(assetId);
+    const preview = await readClothingPreview(assetId, variantId);
     if (!preview) return notFound("Preview image not found");
     const body = new ArrayBuffer(preview.body.byteLength);
     new Uint8Array(body).set(preview.body);

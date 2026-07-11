@@ -1,9 +1,15 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import {
+  CLOTHING_ASSET_ROOT,
+  isSupportedClothingUpload,
   listClothingLibrary,
+  resolveClothingRawUploadDir,
   resolveClothingUploadPath,
+  sanitizeClothingUploadFileName,
   type ClothingUploadResult,
 } from "@/lib/server/gta/clothing-assets";
+import { startClothingCatalogRender } from "@/lib/server/gta/clothing-renderer";
 import { getSessionAccount } from "@/lib/server/auth";
 import {
   badRequest,
@@ -38,18 +44,30 @@ export async function POST(req: Request, { params }: Ctx) {
     if (!form) return badRequest("Multipart form data is required");
 
     const files = form.getAll("files").filter((entry): entry is File => entry instanceof File);
-    if (files.length === 0) return badRequest("At least one zip file is required");
+    if (files.length === 0) return badRequest("At least one clothing asset file is required");
+    const totalSize = files.reduce((total, file) => total + file.size, 0);
+    if (totalSize > MAX_UPLOAD_BYTES) {
+      return badRequest("The upload is larger than the 300 MB upload limit");
+    }
+    const unsupported = files.find((file) => !isSupportedClothingUpload(file.name));
+    if (unsupported) {
+      return badRequest(`${unsupported.name} is not a supported GTA clothing asset`);
+    }
 
     const uploaded: ClothingUploadResult[] = [];
+    const rawFiles = files.filter((file) => !file.name.toLowerCase().endsWith(".zip"));
+    const rawNames = rawFiles.map((file) => sanitizeClothingUploadFileName(file.name));
+    if (new Set(rawNames).size !== rawNames.length) {
+      return badRequest("Duplicate loose filenames must be uploaded in a zip to preserve folders");
+    }
+    const rawUploadDir = rawFiles.length
+      ? await resolveClothingRawUploadDir(rawFiles[0].name)
+      : null;
     for (const file of files) {
-      if (!file.name.toLowerCase().endsWith(".zip")) {
-        return badRequest("Only .zip clothing archives can be uploaded");
-      }
-      if (file.size > MAX_UPLOAD_BYTES) {
-        return badRequest(`${file.name} is larger than the 300 MB upload limit`);
-      }
-
-      const destination = await resolveClothingUploadPath(file.name);
+      const isZip = file.name.toLowerCase().endsWith(".zip");
+      const destination = isZip
+        ? await resolveClothingUploadPath(file.name)
+        : rawUploadDestination(rawUploadDir!, file.name);
       const body = Buffer.from(await file.arrayBuffer());
       await fs.writeFile(destination.absolutePath, body);
       uploaded.push({
@@ -58,6 +76,8 @@ export async function POST(req: Request, { params }: Ctx) {
         size: body.byteLength,
       });
     }
+
+    await startClothingCatalogRender();
 
     return json({
       uploaded,
@@ -68,4 +88,17 @@ export async function POST(req: Request, { params }: Ctx) {
   } catch (e) {
     return serverError(e);
   }
+}
+
+function rawUploadDestination(
+  uploadDir: string,
+  originalName: string,
+): { fileName: string; absolutePath: string; relativePath: string } {
+  const fileName = sanitizeClothingUploadFileName(originalName);
+  const absolutePath = path.join(uploadDir, fileName);
+  return {
+    fileName,
+    absolutePath,
+    relativePath: path.relative(CLOTHING_ASSET_ROOT, absolutePath).split(path.sep).join("/"),
+  };
 }

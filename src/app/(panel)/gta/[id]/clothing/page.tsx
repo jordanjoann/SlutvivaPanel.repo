@@ -1,9 +1,9 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { ClothingReviewWorkspace } from "@/components/gta/clothing-review-workspace";
+import { ClothingOrganizer } from "@/components/gta/clothing-organizer";
 
 export default function GtaClothingPage() {
   const { id } = useParams<{ id: string }>();
-  return <ClothingReviewWorkspace id={id} />;
+  return <ClothingOrganizer id={id} />;
 }

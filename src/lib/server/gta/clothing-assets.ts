@@ -6,25 +6,78 @@ import {
   CLOTHING_TARGETS,
   clothingTargetMeta,
   isClothingTarget,
+  isSortableClothingTarget,
   type ClothingAsset,
   type ClothingDecision,
   type ClothingFileCounts,
+  type ClothingGender,
   type ClothingInstallGroup,
   type ClothingLibraryPayload,
+  type ClothingRendererState,
   type ClothingTarget,
 } from "@/lib/gta-clothing";
 import { gameRoot } from "@/lib/server/config";
 
-type ArchiveEntry = {
+export type ArchiveEntry = {
   path: string;
   extension: string;
 };
 
-type AssetCandidate = Omit<ClothingAsset, "previewUrl" | "decision"> & {
-  sourceType: "archive" | "stream";
+type AssetCandidate = Omit<
+  ClothingAsset,
+  "previewUrl" | "previewVariants" | "previewMimeType" | "renderStatus" | "renderError" | "decision"
+> & {
+  sourceType: "archive" | "native" | "stream" | "loose";
   archivePath: string | null;
   previewEntry: string | null;
-  previewPath: string | null;
+  legacyDecisionIds: string[];
+};
+
+type NativeClothingIndex = {
+  version: 1;
+  archiveRelativePath: string;
+  items: NativeClothingIndexItem[];
+};
+
+type NativeClothingIndexItem = {
+  id: string;
+  relativePath: string;
+  canonicalPath: string;
+  gender: ClothingGender;
+  collection: string;
+  component: string;
+  drawableIndex: number;
+  forms: Array<{ path: string }>;
+  textures: Array<{ path: string }>;
+};
+
+type LoadedNativeClothingIndex = {
+  index: NativeClothingIndex;
+  archivePath: string;
+};
+
+type RenderVariant = {
+  id: string;
+  label: string;
+  fileName: string;
+  formId?: string;
+  formLabel?: string;
+  textureId?: string;
+  textureLabel?: string;
+  isEmpty?: boolean;
+};
+
+type RenderAssetEntry = {
+  status: "ready" | "failed";
+  relativePath: string;
+  updatedAt: number;
+  variants: RenderVariant[];
+  error?: string;
+};
+
+type RenderManifest = ClothingLibraryPayload["renderer"] & {
+  version: 1;
+  assets: Record<string, RenderAssetEntry>;
 };
 
 type ClothingManifest = {
@@ -40,6 +93,13 @@ export type ClothingUploadResult = {
 };
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
+const CLOTHING_UPLOAD_EXTENSIONS = new Set([
+  ".zip",
+  ".ydd",
+  ".ytd",
+  ".ymt",
+  ".yft",
+]);
 const COMPONENT_NAMES = new Set([
   "accs",
   "berd",
@@ -89,53 +149,114 @@ export const CLOTHING_MANIFEST_PATH = path.join(
   "clothing-organizer.json",
 );
 export const CLOTHING_UPLOAD_DIR = path.join(CLOTHING_ASSET_ROOT, "Inbox");
+export const CLOTHING_RENDER_MANIFEST_PATH = path.join(
+  CLOTHING_RENDER_ROOT,
+  "render-manifest.json",
+);
+export const NATIVE_CLOTHING_INDEX_PATH = path.join(
+  CLOTHING_ASSET_ROOT,
+  "Native",
+  "native-clothing-index.json",
+);
+let nativeClothingIndexCache: (LoadedNativeClothingIndex & { mtimeMs: number }) | null = null;
 
 export async function listClothingLibrary(
   previewUrlFor: (assetId: string) => string | null = () => null,
 ): Promise<ClothingLibraryPayload> {
-  const [assets, manifest] = await Promise.all([
+  const [assets, manifest, renderManifest] = await Promise.all([
     listAssetCandidates(),
     loadClothingManifest(),
+    loadRenderManifest(),
   ]);
 
-  const items: ClothingAsset[] = assets.map((asset) => ({
-    id: asset.id,
-    name: asset.name,
-    relativePath: asset.relativePath,
-    sourceFolder: asset.sourceFolder,
-    sourceCategory: asset.sourceCategory,
-    fileCounts: asset.fileCounts,
-    componentHints: asset.componentHints,
-    suggestedTarget: asset.suggestedTarget,
-    previewMimeType: asset.previewMimeType,
-    previewUrl: asset.previewEntry ? previewUrlFor(asset.id) : null,
-    decision: manifest.decisions[asset.id],
-  }));
+  const items: ClothingAsset[] = assets.filter(
+    (asset) => isSortableClothingTarget(asset.suggestedTarget),
+  ).map((asset) => {
+    const render = renderManifest.assets[asset.id];
+    const basePreviewUrl = previewUrlFor(asset.id);
+    const previewVariants =
+      render?.status === "ready" && basePreviewUrl
+        ? render.variants.map((variant) => ({
+            id: variant.id,
+            label: variant.label,
+            previewUrl: appendPreviewVariant(basePreviewUrl, variant.id, render.updatedAt),
+            ...(variant.formId ? { formId: variant.formId } : {}),
+            ...(variant.formLabel ? { formLabel: variant.formLabel } : {}),
+            ...(variant.textureId ? { textureId: variant.textureId } : {}),
+            ...(variant.textureLabel ? { textureLabel: variant.textureLabel } : {}),
+            ...(variant.isEmpty ? { isEmpty: true } : {}),
+          }))
+        : [];
+    const inheritedDecision = asset.legacyDecisionIds
+      .map((legacyId) => manifest.decisions[legacyId])
+      .find(Boolean);
+    const decision = manifest.decisions[asset.id] ?? (inheritedDecision
+      ? {
+          ...inheritedDecision,
+          assetId: asset.id,
+          assetRelativePath: asset.relativePath,
+        }
+      : undefined);
+
+    return {
+      id: asset.id,
+      name: asset.name,
+      relativePath: asset.relativePath,
+      sourceFolder: asset.sourceFolder,
+      sourceCategory: asset.sourceCategory,
+      drawableName: asset.drawableName,
+      gender: asset.gender,
+      fileCounts: asset.fileCounts,
+      componentHints: asset.componentHints,
+      suggestedTarget: asset.suggestedTarget,
+      previewMimeType: previewVariants.length
+        ? "image/png"
+        : asset.previewEntry
+          ? contentTypeForPath(asset.previewEntry)
+          : null,
+      previewUrl: previewVariants[0]?.previewUrl ?? (asset.previewEntry ? basePreviewUrl : null),
+      previewVariants,
+      renderStatus: renderStatusFor(render, renderManifest.state),
+      ...(render?.error ? { renderError: render.error } : {}),
+      decision,
+    };
+  });
 
   return {
     items,
     totals: summarizeClothingAssets(items),
     manifestPath: CLOTHING_MANIFEST_PATH,
     assetRoot: CLOTHING_ASSET_ROOT,
+    renderer: publicRendererStatus(renderManifest),
   };
 }
 
-export async function readClothingPreview(assetId: string) {
-  const assets = await listAssetCandidates();
+export async function readClothingPreview(assetId: string, variantId?: string | null) {
+  const [assets, renderManifest] = await Promise.all([
+    listAssetCandidates(),
+    loadRenderManifest(),
+  ]);
   const asset = assets.find((candidate) => candidate.id === assetId);
-  if (!asset || !asset.previewEntry || !asset.previewMimeType) return null;
+  if (!asset) return null;
 
-  if (asset.sourceType === "stream" && asset.previewPath) {
+  const render = renderManifest.assets[assetId];
+  const variant = render?.variants.find((candidate) => candidate.id === variantId) ?? render?.variants[0];
+  if (
+    render?.status === "ready" &&
+    variant &&
+    safeRenderFileName(variant.fileName) &&
+    await exists(path.join(CLOTHING_RENDER_ROOT, variant.fileName))
+  ) {
     return {
-      body: await fs.readFile(asset.previewPath),
-      mimeType: asset.previewMimeType,
+      body: await fs.readFile(path.join(CLOTHING_RENDER_ROOT, variant.fileName)),
+      mimeType: "image/png",
     };
   }
 
-  if (!asset.archivePath) return null;
+  if (!asset.archivePath || !asset.previewEntry) return null;
   return {
     body: await unzipEntryBuffer(asset.archivePath, asset.previewEntry),
-    mimeType: asset.previewMimeType,
+    mimeType: contentTypeForPath(asset.previewEntry),
   };
 }
 
@@ -194,6 +315,35 @@ export async function resolveClothingUploadPath(
   };
 }
 
+export async function resolveClothingRawUploadDir(label: string): Promise<string> {
+  await fs.mkdir(CLOTHING_UPLOAD_DIR, { recursive: true });
+  const base = `${new Date().toISOString().replace(/[:.]/g, "-")}-${sanitizeNamePart(label)}`;
+  let candidate = base;
+  let index = 2;
+  while (await exists(path.join(CLOTHING_UPLOAD_DIR, candidate))) {
+    candidate = `${base}-${index}`;
+    index += 1;
+  }
+  const absolutePath = path.join(CLOTHING_UPLOAD_DIR, candidate);
+  await fs.mkdir(absolutePath, { recursive: true });
+  return absolutePath;
+}
+
+export function sanitizeClothingUploadFileName(originalName: string): string {
+  const name = path.basename(originalName).replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  const extension = clothingAssetExtension(name);
+  if (!CLOTHING_UPLOAD_EXTENSIONS.has(extension)) {
+    throw new Error("Upload .zip, .ydd, .ytd, .ymt, or .yft GTA clothing files");
+  }
+  const suffixLength = extension.length;
+  const stem = name.slice(0, -suffixLength).replace(/[^a-zA-Z0-9._^ -]+/g, "_").slice(0, 180);
+  return `${stem || "clothing-asset"}${extension}`;
+}
+
+export function isSupportedClothingUpload(fileName: string): boolean {
+  return CLOTHING_UPLOAD_EXTENSIONS.has(clothingAssetExtension(fileName));
+}
+
 export function inferClothingTarget(
   relativePath: string,
   entries: string[],
@@ -229,6 +379,9 @@ export function inferClothingTarget(
   if (lowerPath.includes("/body types/") || name.includes("body")) {
     return "body";
   }
+  if (components.includes("head")) {
+    return "body";
+  }
   if (lowerPath.includes("/masks/") || components.includes("berd") || name.includes("mask")) {
     return "mask";
   }
@@ -257,7 +410,7 @@ export function inferClothingTarget(
   if (lowerPath.includes("/accessories/") || components.some(isAccessoryComponent)) {
     return "accessory";
   }
-  if (components.includes("uppr")) return "body";
+  if (components.includes("uppr")) return "arms";
 
   return "maybe";
 }
@@ -293,14 +446,22 @@ export function previewEntryFromEntries(entries: string[], assetName: string): s
 }
 
 async function listAssetCandidates(): Promise<AssetCandidate[]> {
-  const [archivePaths, streamAssets] = await Promise.all([
+  const [archivePaths, nativeIndex, streamAssets, looseAssets] = await Promise.all([
     findZipArchives(CLOTHING_ASSET_ROOT),
+    loadNativeClothingIndex(),
     listStreamAssetCandidates(),
+    listLooseAssetCandidates(),
   ]);
+  const nativeArchivePath = nativeIndex?.archivePath ?? null;
   const archiveAssets = await Promise.all(
-    archivePaths.map(async (archivePath) => buildArchiveAssetCandidate(archivePath)),
+    archivePaths
+      .filter((archivePath) => archivePath !== nativeArchivePath)
+      .map(async (archivePath) => buildArchiveAssetCandidates(archivePath)),
   );
-  const assets = [...archiveAssets, ...streamAssets];
+  const nativeAssets = nativeIndex
+    ? buildNativeAssetCandidates(nativeIndex.index, nativeIndex.archivePath)
+    : [];
+  const assets = [...archiveAssets.flat(), ...nativeAssets, ...looseAssets, ...streamAssets];
 
   return assets.sort((a, b) => {
     const category = a.sourceCategory.localeCompare(b.sourceCategory);
@@ -309,80 +470,220 @@ async function listAssetCandidates(): Promise<AssetCandidate[]> {
   });
 }
 
-async function buildArchiveAssetCandidate(archivePath: string): Promise<AssetCandidate> {
-  const relativePath = toPosixRelative(archivePath);
-  const entries = await listArchiveEntries(archivePath);
-  const assetName = path.basename(archivePath, path.extname(archivePath)).replace(/[_-]+/g, " ");
-  const previewEntry = previewEntryFromEntries(entries.map((entry) => entry.path), assetName);
+function buildNativeAssetCandidates(
+  index: NativeClothingIndex,
+  archivePath: string,
+): AssetCandidate[] {
+  return index.items.map((item) => {
+    const collectionName = item.collection
+      .replace(/--[a-f0-9]{10}$/i, "")
+      .replace(/[_-]+/g, " ");
+    const componentLabel = item.component.toUpperCase().replace("P_", "P-");
+    const drawableLabel = String(item.drawableIndex).padStart(3, "0");
+    const genderLabel = item.gender === "unknown" ? "" : ` · ${item.gender}`;
+    const relatedPaths = [
+      ...item.forms.map((form) => form.path),
+      ...item.textures.map((texture) => texture.path),
+    ];
 
-  return {
-    id: clothingAssetId(relativePath),
-    name: assetName,
-    sourceType: "archive",
-    archivePath,
-    relativePath,
-    sourceFolder: path.posix.dirname(relativePath),
-    sourceCategory: sourceCategoryFromPath(relativePath),
-    fileCounts: countArchiveFiles(entries),
-    componentHints: componentHintsFromEntries(entries.map((entry) => entry.path)),
-    suggestedTarget: inferClothingTarget(relativePath, entries.map((entry) => entry.path)),
-    previewEntry,
-    previewPath: null,
-    previewMimeType: previewEntry ? contentTypeForPath(previewEntry) : null,
-  };
+    return {
+      id: item.id,
+      name: `${collectionName} · ${componentLabel} ${drawableLabel}${genderLabel}`,
+      sourceType: "native",
+      archivePath,
+      relativePath: item.relativePath,
+      sourceFolder: index.archiveRelativePath,
+      sourceCategory: `Native / ${item.gender} / ${collectionName}`,
+      drawableName: item.canonicalPath,
+      gender: item.gender,
+      fileCounts: {
+        drawables: item.forms.length,
+        textures: item.textures.length,
+        images: 0,
+        other: 0,
+      },
+      componentHints: [item.component],
+      suggestedTarget: inferClothingTarget(item.relativePath, relatedPaths),
+      previewEntry: null,
+      legacyDecisionIds: [
+        clothingAssetId(index.archiveRelativePath),
+        ...item.forms.map((form) => clothingAssetId(`${index.archiveRelativePath}#${form.path}`)),
+      ],
+    };
+  });
+}
+
+async function loadNativeClothingIndex(): Promise<LoadedNativeClothingIndex | null> {
+  try {
+    const stat = await fs.stat(NATIVE_CLOTHING_INDEX_PATH);
+    if (nativeClothingIndexCache?.mtimeMs === stat.mtimeMs) {
+      return nativeClothingIndexCache;
+    }
+    const parsed = JSON.parse(
+      await fs.readFile(NATIVE_CLOTHING_INDEX_PATH, "utf8"),
+    ) as Partial<NativeClothingIndex>;
+    if (parsed.version !== 1 || !Array.isArray(parsed.items)) return null;
+    if (typeof parsed.archiveRelativePath !== "string") return null;
+
+    const archivePath = path.resolve(CLOTHING_ASSET_ROOT, parsed.archiveRelativePath);
+    const assetRootPrefix = `${path.resolve(CLOTHING_ASSET_ROOT)}${path.sep}`;
+    if (!archivePath.startsWith(assetRootPrefix) || !(await exists(archivePath))) return null;
+
+    nativeClothingIndexCache = {
+      index: parsed as NativeClothingIndex,
+      archivePath,
+      mtimeMs: stat.mtimeMs,
+    };
+    return nativeClothingIndexCache;
+  } catch (error) {
+    if (isNodeError(error, "ENOENT") || error instanceof SyntaxError) {
+      nativeClothingIndexCache = null;
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function buildArchiveAssetCandidates(archivePath: string): Promise<AssetCandidate[]> {
+  const archiveRelativePath = toPosixRelative(archivePath);
+  const entries = await listArchiveEntries(archivePath);
+  const packageName = path.basename(archivePath, path.extname(archivePath)).replace(/[_-]+/g, " ");
+  const drawableEntries = entries.filter((entry) => isDrawableExtension(entry.extension));
+  if (drawableEntries.length === 0) {
+    const previewEntry = previewEntryFromEntries(entries.map((entry) => entry.path), packageName);
+    return [{
+      id: clothingAssetId(archiveRelativePath),
+      name: packageName,
+      sourceType: "archive",
+      archivePath,
+      relativePath: archiveRelativePath,
+      sourceFolder: path.posix.dirname(archiveRelativePath),
+      sourceCategory: sourceCategoryFromPath(archiveRelativePath),
+      drawableName: null,
+      gender: "unknown",
+      fileCounts: countArchiveFiles(entries),
+      componentHints: componentHintsFromEntries(entries.map((entry) => entry.path)),
+      suggestedTarget: inferClothingTarget(archiveRelativePath, entries.map((entry) => entry.path)),
+      previewEntry,
+      legacyDecisionIds: [],
+    }];
+  }
+
+  const assets: AssetCandidate[] = [];
+  const seenDrawables = new Set<string>();
+  for (const [index, drawable] of drawableEntries.entries()) {
+    const gender = clothingGender(drawable.path);
+    const fingerprint = `${gender}:${crypto.createHash("sha1").update(await unzipEntryBuffer(archivePath, drawable.path)).digest("hex")}`;
+    if (seenDrawables.has(fingerprint)) continue;
+    seenDrawables.add(fingerprint);
+
+    const textureEntries = matchingTextureEntries(drawable.path, entries);
+    const relatedPaths = [drawable.path, ...textureEntries.map((entry) => entry.path)];
+    const relativePath = `${archiveRelativePath}#${drawable.path}`;
+    assets.push({
+      id: clothingAssetId(relativePath),
+      name: clothingItemName(packageName, drawable.path, gender, index, drawableEntries.length),
+      sourceType: "archive",
+      archivePath,
+      relativePath,
+      sourceFolder: archiveRelativePath,
+      sourceCategory: sourceCategoryFromPath(archiveRelativePath),
+      drawableName: drawable.path,
+      gender,
+      fileCounts: itemFileCounts(textureEntries.length),
+      componentHints: componentHintsFromEntries(relatedPaths),
+      suggestedTarget: inferClothingTarget(archiveRelativePath, relatedPaths),
+      previewEntry: null,
+      legacyDecisionIds: [clothingAssetId(archiveRelativePath)],
+    });
+  }
+  return assets;
 }
 
 async function listStreamAssetCandidates(): Promise<AssetCandidate[]> {
   if (!(await exists(CLOTHING_STREAM_ROOT))) return [];
 
   const entries = await findStreamAssetFiles(CLOTHING_STREAM_ROOT);
-  const groups = new Map<string, ArchiveEntry[]>();
-  for (const entry of entries) {
-    const key = streamAssetKey(entry.path);
-    const group = groups.get(key) ?? [];
-    group.push(entry);
-    groups.set(key, group);
-  }
-
-  return Promise.all(
-    [...groups.entries()].map(([key, entries]) => buildStreamAssetCandidate(key, entries)),
-  );
+  return entries
+    .filter((entry) => isDrawableExtension(entry.extension))
+    .map((drawable, index, drawables) => buildLooseAssetCandidate(
+      drawable,
+      entries,
+      "Installed/slutvival-clothing/stream/",
+      "Installed / slutvival clothing",
+      "Installed/slutvival-clothing/stream",
+      index,
+      drawables.length,
+      "stream",
+    ));
 }
 
-async function buildStreamAssetCandidate(key: string, entries: ArchiveEntry[]): Promise<AssetCandidate> {
-  const entryPaths = entries.map((entry) => entry.path);
-  const assetName = key.replace(/[_-]+/g, " ");
-  const relativePath = `Installed/slutvival-clothing/stream/${key}`;
-  const generatedPreviewPath = await existingRenderPreviewPath(key);
-  const embeddedPreviewEntry = previewEntryFromEntries(entryPaths, assetName);
-  const previewEntry = generatedPreviewPath
-    ? path.posix.join("asset-renders", path.basename(generatedPreviewPath))
-    : embeddedPreviewEntry;
+async function listLooseAssetCandidates(): Promise<AssetCandidate[]> {
+  if (!(await exists(CLOTHING_UPLOAD_DIR))) return [];
+  const entries = await findStreamAssetFiles(CLOTHING_UPLOAD_DIR);
+  return entries
+    .filter((entry) => isDrawableExtension(entry.extension))
+    .map((drawable, index, drawables) => buildLooseAssetCandidate(
+      drawable,
+      entries,
+      "Inbox/",
+      "Inbox / uploaded files",
+      "Inbox",
+      index,
+      drawables.length,
+      "loose",
+    ));
+}
+
+function buildLooseAssetCandidate(
+  drawable: ArchiveEntry,
+  entries: ArchiveEntry[],
+  relativePrefix: string,
+  sourceCategory: string,
+  sourceFolder: string,
+  index: number,
+  total: number,
+  sourceType: "stream" | "loose",
+): AssetCandidate {
+  const textureEntries = matchingTextureEntries(drawable.path, entries);
+  const relatedPaths = [drawable.path, ...textureEntries.map((entry) => entry.path)];
+  const relativePath = `${relativePrefix}${drawable.path}`;
+  const packageName = loosePackageName(drawable.path);
+  const gender = clothingGender(drawable.path);
+  const legacyRelativePath = sourceType === "stream"
+    ? `Installed/slutvival-clothing/stream/${streamAssetKey(drawable.path)}`
+    : path.posix.dirname(relativePath);
 
   return {
     id: clothingAssetId(relativePath),
-    name: assetName,
-    sourceType: "stream",
+    name: clothingItemName(packageName, drawable.path, gender, index, total),
+    sourceType,
     archivePath: null,
     relativePath,
-    sourceFolder: "Installed/slutvival-clothing/stream",
-    sourceCategory: "Installed / slutvival clothing",
-    fileCounts: countArchiveFiles(entries),
-    componentHints: componentHintsFromEntries(entryPaths),
-    suggestedTarget: inferClothingTarget(relativePath, entryPaths),
-    previewEntry,
-    previewPath: generatedPreviewPath ?? (embeddedPreviewEntry ? path.join(CLOTHING_STREAM_ROOT, embeddedPreviewEntry) : null),
-    previewMimeType: previewEntry ? contentTypeForPath(previewEntry) : null,
+    sourceFolder,
+    sourceCategory,
+    drawableName: drawable.path,
+    gender,
+    fileCounts: itemFileCounts(textureEntries.length),
+    componentHints: componentHintsFromEntries(relatedPaths),
+    suggestedTarget: inferClothingTarget(relativePath, relatedPaths),
+    previewEntry: null,
+    legacyDecisionIds: [clothingAssetId(legacyRelativePath)],
   };
 }
 
-async function existingRenderPreviewPath(key: string): Promise<string | null> {
-  const renderPath = path.join(CLOTHING_RENDER_ROOT, `${renderFileNameForStreamKey(key)}.png`);
-  return (await exists(renderPath)) ? renderPath : null;
-}
-
-function renderFileNameForStreamKey(key: string): string {
-  return key.replace(/[^a-zA-Z0-9._-]+/g, "_");
+export function matchingTextureEntries(
+  drawablePath: string,
+  entries: ArchiveEntry[],
+): ArchiveEntry[] {
+  const candidates = entries.filter(
+    (entry) => isTextureExtension(entry.extension) && textureMatchesDrawable(drawablePath, entry.path),
+  );
+  if (candidates.length === 0) return [];
+  const bestScore = Math.max(
+    ...candidates.map((entry) => commonParentScore(drawablePath, entry.path)),
+  );
+  return candidates.filter((entry) => commonParentScore(drawablePath, entry.path) === bestScore);
 }
 
 async function findStreamAssetFiles(root: string, prefix = ""): Promise<ArchiveEntry[]> {
@@ -439,7 +740,7 @@ async function listArchiveEntries(archivePath: string): Promise<ArchiveEntry[]> 
     .filter((entry) => !entry.endsWith("/"))
     .map((entry) => ({
       path: entry,
-      extension: path.posix.extname(entry).toLowerCase(),
+      extension: clothingAssetExtension(entry),
     }));
 }
 
@@ -520,8 +821,229 @@ function summarizeClothingAssets(items: ClothingAsset[]) {
   };
 }
 
-function clothingAssetId(relativePath: string): string {
+export function clothingAssetId(relativePath: string): string {
   return crypto.createHash("sha1").update(relativePath).digest("hex").slice(0, 16);
+}
+
+function appendPreviewVariant(baseUrl: string, variantId: string, updatedAt: number): string {
+  const separator = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}${separator}variant=${encodeURIComponent(variantId)}&v=${updatedAt}`;
+}
+
+function renderStatusFor(
+  render: RenderAssetEntry | undefined,
+  rendererState: ClothingRendererState,
+): ClothingAsset["renderStatus"] {
+  if (render?.status === "ready") return "ready";
+  if (render?.status === "failed") return "failed";
+  if (rendererState === "queued" || rendererState === "running") return "rendering";
+  return "pending";
+}
+
+function publicRendererStatus(manifest: RenderManifest): ClothingLibraryPayload["renderer"] {
+  return {
+    state: manifest.state,
+    startedAt: manifest.startedAt,
+    completedAt: manifest.completedAt,
+    currentAssetId: manifest.currentAssetId,
+    error: manifest.error,
+    totals: { ...manifest.totals },
+  };
+}
+
+async function loadRenderManifest(): Promise<RenderManifest> {
+  const empty = emptyRenderManifest();
+  try {
+    const parsed = JSON.parse(
+      await fs.readFile(CLOTHING_RENDER_MANIFEST_PATH, "utf8"),
+    ) as Partial<RenderManifest>;
+    const state = isRendererState(parsed.state) ? parsed.state : "idle";
+    const assets: Record<string, RenderAssetEntry> = {};
+
+    for (const [assetId, entry] of Object.entries(parsed.assets ?? {})) {
+      if (!entry || (entry.status !== "ready" && entry.status !== "failed")) continue;
+      assets[assetId] = {
+        status: entry.status,
+        relativePath: String(entry.relativePath ?? ""),
+        updatedAt: Number(entry.updatedAt) || 0,
+        variants: Array.isArray(entry.variants)
+          ? entry.variants.filter(isRenderVariant).map((variant) => ({ ...variant }))
+          : [],
+        ...(entry.error ? { error: String(entry.error) } : {}),
+      };
+    }
+
+    return {
+      version: 1,
+      state,
+      startedAt: numericTimestamp(parsed.startedAt),
+      completedAt: numericTimestamp(parsed.completedAt),
+      currentAssetId: typeof parsed.currentAssetId === "string" ? parsed.currentAssetId : null,
+      error: typeof parsed.error === "string" ? parsed.error : null,
+      totals: {
+        assets: nonNegativeNumber(parsed.totals?.assets),
+        ready: nonNegativeNumber(parsed.totals?.ready),
+        failed: nonNegativeNumber(parsed.totals?.failed),
+        variants: nonNegativeNumber(parsed.totals?.variants),
+        renderedVariants: nonNegativeNumber(parsed.totals?.renderedVariants),
+      },
+      assets,
+    };
+  } catch (error) {
+    if (isNodeError(error, "ENOENT") || error instanceof SyntaxError) return empty;
+    throw error;
+  }
+}
+
+function emptyRenderManifest(): RenderManifest {
+  return {
+    version: 1,
+    state: "idle",
+    startedAt: null,
+    completedAt: null,
+    currentAssetId: null,
+    error: null,
+    totals: { assets: 0, ready: 0, failed: 0, variants: 0, renderedVariants: 0 },
+    assets: {},
+  };
+}
+
+function isRendererState(value: unknown): value is ClothingRendererState {
+  return (
+    value === "idle" ||
+    value === "queued" ||
+    value === "running" ||
+    value === "complete" ||
+    value === "complete_with_errors" ||
+    value === "failed"
+  );
+}
+
+function isRenderVariant(value: unknown): value is RenderVariant {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<RenderVariant>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.label === "string" &&
+    typeof candidate.fileName === "string" &&
+    safeRenderFileName(candidate.fileName)
+  );
+}
+
+function numericTimestamp(value: unknown): number | null {
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+}
+
+function nonNegativeNumber(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : 0;
+}
+
+function safeRenderFileName(fileName: string): boolean {
+  return (
+    path.basename(fileName) === fileName &&
+    /^[a-f0-9]{16}--[a-zA-Z0-9._-]+\.png$/.test(fileName)
+  );
+}
+
+function isDrawableExtension(extension: string): boolean {
+  return extension === ".ydd" || extension === ".ydd.xml";
+}
+
+function isTextureExtension(extension: string): boolean {
+  return extension === ".ytd" || extension === ".ytd.xml";
+}
+
+export function clothingGender(value: string): ClothingGender {
+  const lower = value.toLowerCase().replaceAll("\\", "/");
+  if (
+    lower.includes("mp_f_freemode_01") ||
+    `/${lower}/`.includes("/female/") ||
+    `/${lower}/`.includes("/femme/")
+  ) {
+    return "female";
+  }
+  if (lower.includes("mp_m_freemode_01") || `/${lower}/`.includes("/male/")) {
+    return "male";
+  }
+  return "unknown";
+}
+
+function clothingItemName(
+  packageName: string,
+  drawablePath: string,
+  gender: ClothingGender,
+  index: number,
+  total: number,
+): string {
+  if (total === 1) return packageName;
+  const stem = stripClothingAssetExtension(path.posix.basename(drawablePath));
+  const component = (stem.split("^").pop() ?? stem)
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const genderLabel = gender === "unknown" ? "" : ` · ${gender}`;
+  return `${packageName} · ${component || `Item ${index + 1}`}${genderLabel}`;
+}
+
+function loosePackageName(drawablePath: string): string {
+  const parts = drawablePath.split("/").filter(Boolean);
+  const parent = parts.length > 1 ? parts.at(-2) : null;
+  const name = parent ?? stripClothingAssetExtension(parts.at(-1) ?? drawablePath);
+  return name.replace(/[_-]+/g, " ");
+}
+
+function itemFileCounts(textureCount: number): ClothingFileCounts {
+  return { drawables: 1, textures: textureCount, images: 0, other: 0 };
+}
+
+function textureMatchesDrawable(drawablePath: string, texturePath: string): boolean {
+  const drawableStem = stripClothingAssetExtension(path.posix.basename(drawablePath)).toLowerCase();
+  const textureStem = stripClothingAssetExtension(path.posix.basename(texturePath)).toLowerCase();
+  if (
+    drawableStem.includes("^") &&
+    textureStem.includes("^") &&
+    drawableStem.split("^", 1)[0] !== textureStem.split("^", 1)[0]
+  ) {
+    return false;
+  }
+  if (clothingSignature(drawablePath) !== clothingSignature(texturePath)) return false;
+  const drawableGender = clothingGender(drawablePath);
+  const textureGender = clothingGender(texturePath);
+  return (
+    drawableGender === "unknown" ||
+    textureGender === "unknown" ||
+    drawableGender === textureGender
+  );
+}
+
+function clothingSignature(filePath: string): string {
+  const stem = stripClothingAssetExtension(path.posix.basename(filePath)).toLowerCase();
+  return (stem.split("^").pop() ?? stem)
+    .replace(/_diff_(\d{3}).*$/, "_$1")
+    .replace(/_(\d{3})_[a-z]+$/, "_$1");
+}
+
+function stripClothingAssetExtension(fileName: string): string {
+  const extension = clothingAssetExtension(fileName);
+  return extension ? fileName.slice(0, -extension.length) : fileName;
+}
+
+function commonParentScore(left: string, right: string): number {
+  const leftParts = path.posix.dirname(left).toLowerCase().split("/");
+  const rightParts = path.posix.dirname(right).toLowerCase().split("/");
+  let score = 0;
+  while (score < leftParts.length && leftParts[score] === rightParts[score]) score += 1;
+  return score;
+}
+
+function sanitizeNamePart(value: string): string {
+  return (
+    stripClothingAssetExtension(path.basename(value))
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "clothing-assets"
+  );
 }
 
 function streamAssetKey(fileName: string): string {

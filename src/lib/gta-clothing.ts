@@ -72,17 +72,43 @@ export interface ClothingDecision {
   notes?: string;
 }
 
+export type ClothingGender = "female" | "male" | "unisex" | "unknown";
+export type ClothingRenderStatus = "ready" | "rendering" | "pending" | "failed";
+export type ClothingRendererState =
+  | "idle"
+  | "queued"
+  | "running"
+  | "complete"
+  | "complete_with_errors"
+  | "failed";
+
+export interface ClothingPreviewVariant {
+  id: string;
+  label: string;
+  previewUrl: string;
+  formId?: string;
+  formLabel?: string;
+  textureId?: string;
+  textureLabel?: string;
+  isEmpty?: boolean;
+}
+
 export interface ClothingAsset {
   id: string;
   name: string;
   relativePath: string;
   sourceFolder: string;
   sourceCategory: string;
+  drawableName: string | null;
+  gender: ClothingGender;
   fileCounts: ClothingFileCounts;
   componentHints: string[];
   suggestedTarget: ClothingTarget;
   previewUrl: string | null;
+  previewVariants: ClothingPreviewVariant[];
   previewMimeType: string | null;
+  renderStatus: ClothingRenderStatus;
+  renderError?: string;
   decision?: ClothingDecision;
 }
 
@@ -98,6 +124,20 @@ export interface ClothingLibraryPayload {
   totals: ClothingLibraryTotals;
   manifestPath: string;
   assetRoot: string;
+  renderer: {
+    state: ClothingRendererState;
+    startedAt: number | null;
+    completedAt: number | null;
+    currentAssetId: string | null;
+    error: string | null;
+    totals: {
+      assets: number;
+      ready: number;
+      failed: number;
+      variants: number;
+      renderedVariants: number;
+    };
+  };
 }
 
 export interface ClothingAuditItem {
@@ -136,6 +176,10 @@ export function isClothingTarget(value: unknown): value is ClothingTarget {
     typeof value === "string" &&
     CLOTHING_TARGETS.some((target) => target.value === value)
   );
+}
+
+export function isSortableClothingTarget(target: ClothingTarget): boolean {
+  return target !== "body";
 }
 
 export function clothingTargetMeta(target: ClothingTarget) {
