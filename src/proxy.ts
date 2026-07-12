@@ -53,5 +53,7 @@ function isPublicAsset(pathname: string): boolean {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  // World uploads authenticate inside their route so multi-GB bodies can stream
+  // directly to disk instead of being cloned by the proxy's 10 MB body buffer.
+  matcher: ["/((?!_next/static|_next/image|api/world-upload(?:/|$)).*)"],
 };

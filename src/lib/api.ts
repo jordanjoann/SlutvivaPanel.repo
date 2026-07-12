@@ -238,7 +238,7 @@ export const api = {
         const request = new XMLHttpRequest();
         request.open(
           "PUT",
-          `/api/instances/${id}/world?filename=${encodeURIComponent(file.name)}`,
+          `/api/world-upload/${id}?filename=${encodeURIComponent(file.name)}`,
         );
         request.setRequestHeader("Content-Type", "application/octet-stream");
         request.upload.addEventListener("progress", (event) => {
