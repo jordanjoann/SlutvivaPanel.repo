@@ -527,6 +527,17 @@ export interface WorldInfo {
   settings: Record<string, string>;
 }
 
+export interface WorldDeploymentResult {
+  world: WorldInfo;
+  uploadedFileName: string;
+  liveSaveFileName: string;
+  previousSaveFileName?: string;
+  configBackupFileName: string;
+  serverWasRunning: boolean;
+  serverStarted: boolean;
+  warning?: string;
+}
+
 /* ------------------------------------------------------------------ */
 /* Version / update                                                   */
 /* ------------------------------------------------------------------ */

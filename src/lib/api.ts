@@ -17,6 +17,7 @@ import type {
   ServerSettings,
   VintageStoryNetworkSetupResult,
   VintageStoryNetworkStatus,
+  WorldDeploymentResult,
   WorldInfo,
 } from "./types";
 import type {
@@ -228,6 +229,45 @@ export const api = {
     get: (id: string) => fetcher<WorldInfo>(`/api/instances/${id}/world`),
     update: (id: string, patch: Partial<WorldInfo>) =>
       send<WorldInfo>(`/api/instances/${id}/world`, "PATCH", patch),
+    deploy: (
+      id: string,
+      file: File,
+      onProgress?: (percent: number) => void,
+    ) =>
+      new Promise<WorldDeploymentResult>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open(
+          "PUT",
+          `/api/instances/${id}/world?filename=${encodeURIComponent(file.name)}`,
+        );
+        request.setRequestHeader("Content-Type", "application/octet-stream");
+        request.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) {
+            onProgress?.(Math.round((event.loaded / event.total) * 100));
+          }
+        });
+        request.addEventListener("load", () => {
+          const body = parseJsonResponse(request.responseText);
+          if (request.status < 200 || request.status >= 300) {
+            reject(
+              new ApiError(
+                stringProperty(body, "error") ?? "World deployment failed",
+                request.status,
+                stringProperty(body, "detail"),
+              ),
+            );
+            return;
+          }
+          resolve(body as unknown as WorldDeploymentResult);
+        });
+        request.addEventListener("error", () => {
+          reject(new ApiError("World upload failed", request.status || 0));
+        });
+        request.addEventListener("abort", () => {
+          reject(new ApiError("World upload cancelled", 0));
+        });
+        request.send(file);
+      }),
   },
 
   vintageStory: {
@@ -254,3 +294,18 @@ export const api = {
       ),
   },
 };
+
+function parseJsonResponse(raw: string): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function stringProperty(value: Record<string, unknown>, key: string) {
+  return typeof value[key] === "string" ? value[key] : undefined;
+}
