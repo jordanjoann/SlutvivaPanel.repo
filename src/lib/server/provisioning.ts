@@ -15,6 +15,7 @@ import {
 } from "./config";
 import { ensureFxServerInstalled } from "./gta/artifacts";
 import { ensureStratumArtifact } from "./vintage-network/artifacts";
+import { STRATUM_RELEASE_TAG } from "./vintage-network/constants";
 import { packageUrl } from "./versions";
 
 const execFileAsync = promisify(execFile);
@@ -44,6 +45,9 @@ export function dockerCommand(inst: Instance): string[] {
 
 export function serverInstallMarkerValue(inst: Instance): string {
   if (inst.game === "gta") return `fxserver:${inst.version}`;
+  if (inst.serverEngine === "stratum") {
+    return `stratum:${inst.version}:${STRATUM_RELEASE_TAG}`;
+  }
   return `${inst.serverEngine}:${inst.version}`;
 }
 
@@ -156,17 +160,17 @@ async function ensureStratumServerInstalled(
   options.onLog?.(`[Install] Installing Stratum ${inst.version}.`);
   const artifactDir = await ensureStratumArtifact();
   const tmpRoot = path.join(instanceDir(inst.id), `.server-install-stratum-${Date.now()}`);
-  const extractDir = path.join(tmpRoot, "server");
+  const stagedBinary = path.join(tmpRoot, "StratumServer");
 
   await fs.rm(tmpRoot, { recursive: true, force: true });
-  await fs.mkdir(extractDir, { recursive: true });
+  await fs.mkdir(tmpRoot, { recursive: true });
 
   try {
-    await fs.copyFile(path.join(artifactDir, "StratumServer"), path.join(extractDir, "StratumServer"));
-    await fs.chmod(path.join(extractDir, "StratumServer"), 0o755);
-    await fs.writeFile(path.join(extractDir, VERSION_MARKER), `${serverInstallMarkerValue(inst)}\n`, "utf8");
-    await fs.rm(installDir, { recursive: true, force: true });
-    await fs.rename(extractDir, installDir);
+    await fs.copyFile(path.join(artifactDir, "StratumServer"), stagedBinary);
+    await fs.chmod(stagedBinary, 0o755);
+    await fs.mkdir(installDir, { recursive: true });
+    await fs.rename(stagedBinary, path.join(installDir, "StratumServer"));
+    await fs.writeFile(path.join(installDir, VERSION_MARKER), `${serverInstallMarkerValue(inst)}\n`, "utf8");
     await ensureInstanceDockerFiles(inst);
   } finally {
     await fs.rm(tmpRoot, { recursive: true, force: true });

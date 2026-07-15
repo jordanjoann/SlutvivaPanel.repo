@@ -74,7 +74,9 @@ describe("provisioning engine support", () => {
   });
 
   it("includes engine and version in install markers", () => {
-    expect(serverInstallMarkerValue(instance("stratum"))).toBe("stratum:1.22.3");
+    expect(serverInstallMarkerValue(instance("stratum"))).toBe(
+      "stratum:1.22.3:v1.22.3-stratum.15",
+    );
   });
 
   it("does not publish Stratum backend ports in generated compose files", () => {

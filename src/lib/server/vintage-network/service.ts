@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
 import type {
   CreateInstanceInput,
+  Instance,
   VintageStoryNetworkSetupResult,
   VintageStoryNetworkStatus,
 } from "@/lib/types";
 import { config } from "@/lib/server/config";
-import { createInstance, getInstance, listInstances } from "@/lib/server/store";
+import { createInstance, listInstances } from "@/lib/server/store";
 import { supervisor } from "@/lib/server/supervisor";
 import { ensureNimbusArtifact, ensureStratumArtifact, readArtifactMarker } from "./artifacts";
 import {
@@ -23,7 +24,7 @@ import { ensureNimbusProxy, isNimbusProxyRunning } from "./docker-proxy";
 import { writeNimbusFiles } from "./nimbus-config";
 
 export async function getVintageNetworkStatus(): Promise<VintageStoryNetworkStatus> {
-  const hub = await getInstance(HUB_INSTANCE_ID);
+  const hub = selectHubInstance(await listInstances("vintage-story"));
   const stratumMarker = await readArtifactMarker(stratumInstallDir());
   const nimbusMarker = await readArtifactMarker(nimbusInstallDir());
   return {
@@ -53,7 +54,7 @@ export async function setupVintageNetwork(): Promise<VintageStoryNetworkSetupRes
 }
 
 async function ensureHubInstance() {
-  const existing = await getInstance(HUB_INSTANCE_ID);
+  const existing = selectHubInstance(await listInstances("vintage-story"));
   if (existing) return existing;
 
   const input: CreateInstanceInput = {
@@ -75,4 +76,11 @@ async function ensureHubInstance() {
     initialWorldConfig: creativeSuperflatHubWorld(),
   };
   return createInstance(input);
+}
+
+export function selectHubInstance(instances: Instance[]): Instance | undefined {
+  return (
+    instances.find((instance) => instance.id === HUB_INSTANCE_ID) ??
+    instances.find((instance) => instance.name.trim().toLowerCase() === "hub")
+  );
 }

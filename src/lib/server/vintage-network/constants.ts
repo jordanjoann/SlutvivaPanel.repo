@@ -5,10 +5,10 @@ import type { VintageStoryWorldGenerationConfig } from "@/lib/vintage-story-worl
 export const HUB_INSTANCE_ID = "hub";
 export const NIMBUS_PROXY_CONTAINER = "nimbus-proxy";
 export const STRATUM_RELEASE_TAG =
-  process.env.STRATUM_RELEASE_TAG ?? "v1.22.3-stratum.12";
+  process.env.STRATUM_RELEASE_TAG ?? "v1.22.3-stratum.15";
 export const STRATUM_ASSET_NAME =
   process.env.STRATUM_ASSET_NAME ??
-  "stratum-1.22.3-stratum.12-linux-x64.zip";
+  "stratum-1.22.3-stratum.15-linux-x64.zip";
 export const NIMBUS_RELEASE_TAG =
   process.env.NIMBUS_RELEASE_TAG ?? "0.1.0-dev";
 export const NIMBUS_ASSET_NAME =

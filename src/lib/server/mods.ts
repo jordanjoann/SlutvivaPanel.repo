@@ -1,10 +1,15 @@
 import fs from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { InstalledMod, ModSearchResult } from "@/lib/types";
 import { FALLBACK_VINTAGE_STORY_VERSIONS } from "@/lib/vintage-story-versions";
 import { vsPaths } from "./config";
 import { consoleBus } from "./console-bus";
+
+const MAX_MOD_ARCHIVE_BYTES = 256 * 1024 * 1024;
+const MOD_DB_CDN_HOST = "moddbcdn.vintagestory.at";
 
 function manifestPath(serverId: string): string {
   return path.join(vsPaths(serverId).modConfig, "panel-mods.json");
@@ -38,15 +43,24 @@ async function readManifest(serverId: string): Promise<InstalledMod[]> {
 async function writeManifest(serverId: string, mods: InstalledMod[]) {
   const file = manifestPath(serverId);
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(mods, null, 2), "utf8");
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  await fs.writeFile(temporary, JSON.stringify(mods, null, 2), "utf8");
+  await fs.rename(temporary, file);
 }
 
 export async function listInstalled(serverId: string): Promise<InstalledMod[]> {
   const mods = await readManifest(serverId);
-  return mods.map((m) => ({
-    ...m,
-    fileName: m.fileName ?? `${m.id}_${m.installedVersion}.zip`,
-  }));
+  const paths = vsPaths(serverId);
+  const installed = await Promise.all(
+    mods.map(async (mod) => {
+      const fileName = safeArchiveFileName(mod.fileName ?? `${mod.id}_${mod.installedVersion}.zip`);
+      if (!fileName) return null;
+      const enabled = await fileExists(path.join(paths.mods, fileName));
+      const disabled = await fileExists(path.join(paths.managedMods, fileName));
+      return enabled || disabled ? { ...mod, fileName, enabled } : null;
+    }),
+  );
+  return installed.filter((mod): mod is InstalledMod => mod !== null);
 }
 
 export async function setModEnabled(
@@ -57,6 +71,23 @@ export async function setModEnabled(
   const mods = await readManifest(serverId);
   const mod = mods.find((m) => m.id === modId);
   if (!mod) return null;
+  const fileName = safeArchiveFileName(mod.fileName);
+  if (!fileName) throw new Error(`Mod '${mod.name}' has an invalid archive name.`);
+
+  const paths = vsPaths(serverId);
+  const source = path.join(enabled ? paths.managedMods : paths.mods, fileName);
+  const destinationDir = enabled ? paths.mods : paths.managedMods;
+  const destination = path.join(destinationDir, fileName);
+  if (!(await fileExists(source))) {
+    if (!(await fileExists(destination))) {
+      throw new Error(`Mod archive '${fileName}' is missing.`);
+    }
+  } else {
+    await fs.mkdir(destinationDir, { recursive: true });
+    await fs.rm(destination, { force: true });
+    await fs.rename(source, destination);
+  }
+
   mod.enabled = enabled;
   await writeManifest(serverId, mods);
   consoleBus.push(
@@ -74,11 +105,12 @@ export async function updateMod(
   const mods = await readManifest(serverId);
   const mod = mods.find((m) => m.id === modId);
   if (!mod) return null;
-  if (mod.latestVersion) mod.installedVersion = mod.latestVersion;
-  await writeManifest(serverId, mods);
+  const official = await fetchModById(mod.id);
+  const version = official.latestVersion;
+  await installResolvedMod(serverId, mods, mod, official, version);
   consoleBus.push(
     serverId,
-    `Mod '${mod.name}' updated to ${mod.installedVersion}.`,
+    `Mod '${mod.name}' updated to ${version}. Active after the next restart.`,
     "system",
   );
   return mod;
@@ -89,8 +121,11 @@ export async function removeMod(
   modId: string,
 ): Promise<boolean> {
   const mods = await readManifest(serverId);
-  const next = mods.filter((m) => m.id !== modId);
+  const mod = mods.find((item) => item.id === modId);
+  const next = mods.filter((item) => item.id !== modId);
   if (next.length === mods.length) return false;
+  const fileName = safeArchiveFileName(mod?.fileName);
+  if (fileName) await removeArchiveCopies(serverId, fileName);
   await writeManifest(serverId, next);
   consoleBus.push(serverId, `Mod '${modId}' removed.`, "system");
   return true;
@@ -103,32 +138,23 @@ export async function installMod(
 ): Promise<InstalledMod> {
   const mods = await readManifest(serverId);
   const v = version ?? result.latestVersion;
+  const official = await fetchModById(result.id);
   const existing = mods.find((m) => m.id === result.id);
-  if (existing) {
-    existing.installedVersion = v;
-    existing.enabled = true;
-  } else {
-    mods.push({
-      id: result.id,
-      name: result.name,
-      author: result.author,
-      description: result.summary,
-      iconUrl: result.iconUrl,
-      installedVersion: v,
-      latestVersion: result.latestVersion,
-      enabled: true,
-      side: result.side,
-      fileName: `${result.id}_${v}.zip`,
-      dependencies: result.dependencies,
-    });
-  }
-  await writeManifest(serverId, mods);
+  const mod = existing ?? {
+    id: official.id,
+    name: official.name,
+    installedVersion: v,
+    enabled: true,
+    fileName: "",
+  };
+  if (!existing) mods.push(mod);
+  await installResolvedMod(serverId, mods, mod, official, v);
   consoleBus.push(
     serverId,
-    `Installed '${result.name}' v${v}. This mod will become active after the next restart.`,
+    `Installed '${official.name}' v${v}. This mod will become active after the next restart.`,
     "system",
   );
-  return mods.find((m) => m.id === result.id)!;
+  return mod;
 }
 
 /** Register a mod archive that was uploaded via drag-and-drop. */
@@ -136,9 +162,15 @@ export async function installFile(
   serverId: string,
   fileName: string,
 ): Promise<InstalledMod> {
+  const safeFileName = safeArchiveFileName(fileName);
+  if (!safeFileName) throw new Error("A valid .zip, .cs, or .dll mod file is required.");
+  if (!(await fileExists(path.join(vsPaths(serverId).mods, safeFileName)))) {
+    throw new Error(`Uploaded mod archive '${safeFileName}' was not found in the Mods directory.`);
+  }
+
   const mods = await readManifest(serverId);
-  const id = fileName.replace(/\.(zip|cs|dll)$/i, "").toLowerCase();
-  const name = fileName
+  const id = safeFileName.replace(/\.(zip|cs|dll)$/i, "").toLowerCase();
+  const name = safeFileName
     .replace(/\.(zip|cs|dll)$/i, "")
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -149,7 +181,7 @@ export async function installFile(
       name,
       installedVersion: "manual",
       enabled: true,
-      fileName,
+      fileName: safeFileName,
       side: "Universal",
     });
     await writeManifest(serverId, mods);
@@ -160,6 +192,144 @@ export async function installFile(
     "system",
   );
   return mods.find((m) => m.id === id)!;
+}
+
+async function installResolvedMod(
+  serverId: string,
+  mods: InstalledMod[],
+  mod: InstalledMod,
+  official: ModSearchResult,
+  version: string,
+): Promise<void> {
+  const release = official.versions.find((candidate) => candidate.version === version);
+  if (!release?.downloadUrl) {
+    throw new Error(`Vintage Story ModDB has no downloadable archive for ${official.name} v${version}.`);
+  }
+
+  const downloadUrl = officialModDownloadUrl(release.downloadUrl);
+  const fileName = archiveFileName(downloadUrl, official.id, version);
+  const previousFileName = safeArchiveFileName(mod.fileName);
+  const enabled = mod.enabled !== false;
+  const destinationDir = enabled ? vsPaths(serverId).mods : vsPaths(serverId).managedMods;
+  await downloadModArchive(downloadUrl, destinationDir, fileName);
+  if (previousFileName && previousFileName !== fileName) {
+    await removeArchiveCopies(serverId, previousFileName);
+  }
+
+  Object.assign(mod, {
+    id: official.id,
+    name: official.name,
+    author: official.author,
+    description: official.summary,
+    iconUrl: official.iconUrl,
+    installedVersion: version,
+    latestVersion: official.latestVersion,
+    enabled,
+    side: official.side,
+    fileName,
+    dependencies: official.dependencies,
+  });
+  await writeManifest(serverId, mods);
+}
+
+async function downloadModArchive(url: URL, destinationDir: string, fileName: string): Promise<void> {
+  await fs.mkdir(destinationDir, { recursive: true });
+  const destination = path.join(destinationDir, fileName);
+  const temporary = path.join(destinationDir, `.${fileName}.${randomUUID()}.part`);
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: { Accept: "application/zip", "User-Agent": "Slutvival Panel Mod Installer" },
+    redirect: "error",
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Mod archive download failed: ${response.status} ${response.statusText}`);
+  }
+
+  const contentLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > MAX_MOD_ARCHIVE_BYTES) {
+    throw new Error("Mod archive exceeds the 256 MiB download limit.");
+  }
+
+  let handle: FileHandle | undefined;
+  try {
+    handle = await fs.open(temporary, "wx");
+    const reader = response.body.getReader();
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MAX_MOD_ARCHIVE_BYTES) {
+        await reader.cancel();
+        throw new Error("Mod archive exceeds the 256 MiB download limit.");
+      }
+      await handle.write(value);
+    }
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    await assertZipArchive(temporary);
+    await fs.rename(temporary, destination);
+  } catch (error) {
+    await handle?.close().catch(() => {});
+    await fs.rm(temporary, { force: true });
+    throw error;
+  }
+}
+
+async function assertZipArchive(file: string): Promise<void> {
+  const handle = await fs.open(file, "r");
+  try {
+    const header = Buffer.alloc(4);
+    const { bytesRead } = await handle.read(header, 0, header.length, 0);
+    if (bytesRead < 4 || header[0] !== 0x50 || header[1] !== 0x4b) {
+      throw new Error("Downloaded mod is not a valid ZIP archive.");
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
+async function removeArchiveCopies(serverId: string, fileName: string): Promise<void> {
+  const paths = vsPaths(serverId);
+  await Promise.all([
+    fs.rm(path.join(paths.mods, fileName), { force: true }),
+    fs.rm(path.join(paths.managedMods, fileName), { force: true }),
+  ]);
+}
+
+function officialModDownloadUrl(value: string): URL {
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.hostname.toLowerCase() !== MOD_DB_CDN_HOST) {
+    throw new Error("ModDB returned an untrusted archive URL.");
+  }
+  return url;
+}
+
+function archiveFileName(url: URL, modId: string, version: string): string {
+  const requestedName = url.searchParams.get("dl");
+  return safeArchiveFileName(requestedName) ?? `${safeToken(modId)}_${safeToken(version)}.zip`;
+}
+
+function safeArchiveFileName(value?: string | null): string | null {
+  if (!value) return null;
+  const base = path.basename(value);
+  if (base !== value || !/^[a-z0-9][a-z0-9._+ -]*\.(zip|cs|dll)$/i.test(base)) return null;
+  return base;
+}
+
+function safeToken(value: string): string {
+  const token = value.trim().replace(/[^a-z0-9._-]+/gi, "-");
+  if (!token) throw new Error("Invalid mod identifier or version.");
+  return token;
+}
+
+async function fileExists(file: string): Promise<boolean> {
+  try {
+    return (await fs.stat(file)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -244,6 +414,16 @@ async function fetchModDatabase(query: string): Promise<ModSearchResult[]> {
   );
 
   return results.filter((result): result is ModSearchResult => result !== null);
+}
+
+async function fetchModById(id: string): Promise<ModSearchResult> {
+  const safeId = safeToken(id).toLowerCase();
+  const detail = await fetchJson<ModDbDetailResponse>(
+    `${MOD_DB_API_BASE}/mod/${encodeURIComponent(safeId)}`,
+  );
+  const result = detail.mod ? mapModDbResult(detail.mod) : null;
+  if (!result) throw new Error(`Mod '${id}' was not found in Vintage Story ModDB.`);
+  return { ...result, id: safeId };
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
