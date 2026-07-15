@@ -42,13 +42,18 @@ export interface VintageStoryWorldGenerationConfig {
   globalDepositSpawnRate: number;
   surfaceCopperDeposits: number;
   surfaceTinDeposits: number;
+  storyStructuresDistScaling: number;
   snowAccum: boolean;
   daysPerMonth: number;
   graceTimer: number;
+  droppedItemsTimer: number;
   creatureHostility: "aggressive" | "passive" | "off";
   creatureStrength: number;
+  creatureSwimSpeed: number;
   temporalStorms: "off" | "veryrare" | "rare" | "sometimes" | "often" | "veryoften";
+  tempstormDurationMul: number;
   temporalRifts: "off" | "invisible" | "visible";
+  temporalGearRespawnUses: number;
   temporalStability: boolean;
   temporalStormSleeping: boolean;
   seasons: "enabled" | "spring" | "summer" | "fall" | "winter";
@@ -59,26 +64,44 @@ export interface VintageStoryWorldGenerationConfig {
   playerHungerSpeed: number;
   playerMoveSpeed: number;
   playerHealthRegenSpeed: number;
+  lungCapacity: number;
+  bodyTemperatureResistance: number;
   foodSpoilSpeed: number;
   saplingGrowthRate: number;
   toolDurability: number;
   toolMiningSpeed: number;
+  propickNodeSearchRadius: number;
+  microblockChiseling: "off" | "stonewood" | "all";
+  clutterObtainable: "ifrepaired" | "yes" | "no";
   blockGravity: "sandgravel" | "sandgravelsoil";
   caveIns: "on" | "off";
   harshWinters: boolean;
   allowPvp: boolean;
   allowFireSpread: boolean;
   allowFallingBlocks: boolean;
+  lightningFires: boolean;
   allowUndergroundFarming: boolean;
+  noLiquidSourceTransport: boolean;
   allowMap: boolean;
   allowCoordinateHud: boolean;
   colorAccurateWorldmap: boolean;
   allowLandClaiming: boolean;
   loreContent: boolean;
   classExclusiveRecipes: boolean;
+  auctionHouse: boolean;
+  allowTimeswitch: boolean;
   passTimeWhenEmpty: boolean;
   whitelistMode: boolean;
 }
+
+export const VINTAGE_STORY_WORLD_TABS = [
+  { value: "player-spawn", label: "Player spawn and death" },
+  { value: "survival", label: "Survival challenges" },
+  { value: "temporal", label: "Temporal stability" },
+  { value: "world-generation", label: "World generation" },
+  { value: "multiplayer", label: "Multiplayer" },
+  { value: "admin", label: "Admin" },
+] as const;
 
 export const VINTAGE_STORY_PLAY_STYLES: Array<
   SelectOption<VintageStoryPlayStyle> & {
@@ -89,7 +112,7 @@ export const VINTAGE_STORY_PLAY_STYLES: Array<
 > = [
   {
     value: "surviveandbuild",
-    label: "Survive and build",
+    label: "Standard",
     langCode: "preset-surviveandbuild",
     defaultGameMode: "survival",
     allowCreativeMode: false,
@@ -103,7 +126,7 @@ export const VINTAGE_STORY_PLAY_STYLES: Array<
   },
   {
     value: "wildernesssurvival",
-    label: "Wilderness survival",
+    label: "Wilderness Survival",
     langCode: "preset-wildernesssurvival",
     defaultGameMode: "survival",
     allowCreativeMode: false,
@@ -117,7 +140,7 @@ export const VINTAGE_STORY_PLAY_STYLES: Array<
   },
   {
     value: "creativebuilding",
-    label: "Creative building",
+    label: "Creative Building",
     langCode: "preset-creativebuilding",
     defaultGameMode: "creative",
     allowCreativeMode: true,
@@ -140,16 +163,16 @@ export const WORLD_CLIMATE_OPTIONS: Array<SelectOption<VintageStoryWorldGenerati
 ];
 
 export const STARTING_CLIMATE_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["startingClimate"]>> = [
-  { value: "temperate", label: "Temperate" },
-  { value: "warm", label: "Warm" },
-  { value: "hot", label: "Hot" },
-  { value: "cool", label: "Cool" },
-  { value: "icy", label: "Icy" },
+  { value: "hot", label: "Hot (28-32 °C)" },
+  { value: "warm", label: "Warm (19-23 °C)" },
+  { value: "temperate", label: "Temperate (6-14 °C)" },
+  { value: "cool", label: "Cool (-5 to 1 °C)" },
+  { value: "icy", label: "Icy (-15 to -10 °C)" },
 ];
 
 export const WORLD_EDGE_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["worldEdge"]>> = [
-  { value: "traversable", label: "Traversable" },
   { value: "blocked", label: "Blocked" },
+  { value: "traversable", label: "Traversable (Can fall down)" },
 ];
 
 export const CREATURE_HOSTILITY_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["creatureHostility"]>> = [
@@ -159,12 +182,32 @@ export const CREATURE_HOSTILITY_OPTIONS: Array<SelectOption<VintageStoryWorldGen
 ];
 
 export const TEMPORAL_STORM_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["temporalStorms"]>> = [
-  { value: "sometimes", label: "Sometimes" },
   { value: "off", label: "Off" },
-  { value: "veryrare", label: "Very rare" },
-  { value: "rare", label: "Rare" },
-  { value: "often", label: "Often" },
-  { value: "veryoften", label: "Very often" },
+  {
+    value: "veryrare",
+    label:
+      "Approx. every 30-40 days, increase strength/frequency by +2.5% each time, capped at 25%",
+  },
+  {
+    value: "rare",
+    label:
+      "Approx. every 20-30 days, increase strength/frequency by +5% each time, capped at 50%",
+  },
+  {
+    value: "sometimes",
+    label:
+      "Approx. every 10-20 days, increase strength/frequency by +10% each time, capped at 100%",
+  },
+  {
+    value: "often",
+    label:
+      "Approx. every 5-10 days, increase strength/frequency by +15% each time, capped at 150%",
+  },
+  {
+    value: "veryoften",
+    label:
+      "Approx. every 3-6 days, increase strength/frequency by +20% each time, capped at 200%",
+  },
 ];
 
 export const TEMPORAL_RIFT_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["temporalRifts"]>> = [
@@ -175,32 +218,35 @@ export const TEMPORAL_RIFT_OPTIONS: Array<SelectOption<VintageStoryWorldGenerati
 
 export const SEASON_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["seasons"]>> = [
   { value: "enabled", label: "Enabled" },
-  { value: "spring", label: "Spring" },
-  { value: "summer", label: "Summer" },
-  { value: "fall", label: "Fall" },
-  { value: "winter", label: "Winter" },
+  { value: "spring", label: "Off, always spring" },
+  { value: "summer", label: "Off, always summer" },
+  { value: "fall", label: "Off, always fall" },
+  { value: "winter", label: "Off, always winter" },
 ];
 
 export const DEATH_PUNISHMENT_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["deathPunishment"]>> = [
-  { value: "drop", label: "Drop inventory" },
-  { value: "keep", label: "Keep inventory" },
+  { value: "drop", label: "Drop inventory contents" },
+  { value: "keep", label: "Keep inventory contents" },
 ];
 
 export const BLOCK_GRAVITY_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["blockGravity"]>> = [
   { value: "sandgravel", label: "Sand and gravel" },
-  { value: "sandgravelsoil", label: "Sand, gravel, and soil" },
+  {
+    value: "sandgravelsoil",
+    label: "Sand, gravel and soil with sideways instability",
+  },
 ];
 
 export const CAVE_IN_OPTIONS: Array<SelectOption<VintageStoryWorldGenerationConfig["caveIns"]>> = [
-  { value: "off", label: "Off" },
-  { value: "on", label: "On" },
+  { value: "off", label: "Disabled" },
+  { value: "on", label: "Enabled" },
 ];
 
 export const WORLD_SIZE_OPTIONS: NumberOption[] = [
-  { value: 8192000, label: "8 million blocks" },
-  { value: 4096000, label: "4 million blocks" },
-  { value: 2048000, label: "2 million blocks" },
-  { value: 1024000, label: "1 million blocks" },
+  { value: 8192000, label: "8 mil blocks" },
+  { value: 4096000, label: "4 mil blocks" },
+  { value: 2048000, label: "2 mil blocks" },
+  { value: 1024000, label: "1 mil blocks" },
   { value: 600000, label: "600k blocks" },
   { value: 512000, label: "512k blocks" },
   { value: 384000, label: "384k blocks" },
@@ -281,7 +327,7 @@ export const GEOLOGIC_ACTIVITY_OPTIONS: NumberOption[] = [
   { value: 0.05, label: "Rare" },
   { value: 0.1, label: "Uncommon" },
   { value: 0.2, label: "Common" },
-  { value: 0.4, label: "Very common" },
+  { value: 0.4, label: "Very Common" },
 ];
 
 export const LANDFORM_SCALE_OPTIONS: NumberOption[] = [
@@ -333,17 +379,17 @@ export const GLOBAL_FORESTATION_OPTIONS: NumberOption[] = [
 ];
 
 export const GLOBAL_DEPOSIT_SPAWN_RATE_OPTIONS: NumberOption[] = [
-  { value: 3, label: "Very common (300%)" },
-  { value: 2, label: "Common (200%)" },
-  { value: 1.8, label: "More common (180%)" },
-  { value: 1.6, label: "More common (160%)" },
-  { value: 1.4, label: "Slightly common (140%)" },
-  { value: 1.2, label: "Slightly common (120%)" },
-  { value: 1, label: "Normal (100%)" },
-  { value: 0.8, label: "Slightly rare (80%)" },
-  { value: 0.6, label: "Uncommon (60%)" },
-  { value: 0.4, label: "Rare (40%)" },
-  { value: 0.2, label: "Very rare (20%)" },
+  { value: 3, label: "300%" },
+  { value: 2, label: "200%" },
+  { value: 1.8, label: "180%" },
+  { value: 1.6, label: "160%" },
+  { value: 1.4, label: "140%" },
+  { value: 1.2, label: "120%" },
+  { value: 1, label: "100%" },
+  { value: 0.8, label: "80%" },
+  { value: 0.6, label: "60%" },
+  { value: 0.4, label: "40%" },
+  { value: 0.2, label: "20%" },
 ];
 
 export const SURFACE_COPPER_DEPOSIT_OPTIONS: NumberOption[] = [
@@ -503,6 +549,88 @@ export const TOOL_MINING_SPEED_OPTIONS: NumberOption[] = [
   { value: 0.25, label: "25%" },
 ];
 
+export const DROPPED_ITEMS_TIMER_OPTIONS: NumberOption[] = [
+  { value: 300, label: "5 minutes" },
+  { value: 600, label: "10 minutes" },
+  { value: 1200, label: "20 minutes" },
+  { value: 1800, label: "30 minutes" },
+  { value: 3600, label: "1 hour" },
+];
+
+export const LUNG_CAPACITY_OPTIONS: NumberOption[] = [
+  { value: 10000, label: "10 seconds" },
+  { value: 20000, label: "20 seconds" },
+  { value: 30000, label: "30 seconds" },
+  { value: 40000, label: "40 seconds" },
+  { value: 60000, label: "60 seconds" },
+  { value: 120000, label: "2 minutes" },
+  { value: 3600000, label: "60 minutes" },
+];
+
+export const BODY_TEMPERATURE_RESISTANCE_OPTIONS: NumberOption[] = [
+  -40, -30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20,
+].map((value) => ({ value, label: `${value} °C` }));
+
+export const CREATURE_SWIM_SPEED_OPTIONS: NumberOption[] = [
+  0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3,
+].map((value) => ({ value, label: `${value * 100}%` }));
+
+export const PRO_PICK_NODE_SEARCH_RADIUS_OPTIONS: NumberOption[] = [
+  { value: 0, label: "Disabled" },
+  { value: 2, label: "2 blocks" },
+  { value: 4, label: "4 blocks" },
+  { value: 6, label: "6 blocks" },
+  { value: 8, label: "8 blocks" },
+];
+
+export const MICROBLOCK_CHISELING_OPTIONS: Array<
+  SelectOption<VintageStoryWorldGenerationConfig["microblockChiseling"]>
+> = [
+  { value: "off", label: "Off" },
+  { value: "stonewood", label: "Stone, Wood and Bricks" },
+  { value: "all", label: "Most cubic blocks" },
+];
+
+export const CLUTTER_OBTAINABLE_OPTIONS: Array<
+  SelectOption<VintageStoryWorldGenerationConfig["clutterObtainable"]>
+> = [
+  { value: "ifrepaired", label: "Only if first repaired using glue" },
+  { value: "yes", label: "Yes, simply by breaking them" },
+  { value: "no", label: "No, they always shatter" },
+];
+
+export const TEMPORAL_STORM_DURATION_OPTIONS: NumberOption[] = [
+  { value: 2, label: "Much longer (200%)" },
+  { value: 1.5, label: "Longer (150%)" },
+  { value: 1.25, label: "Slightly longer (125%)" },
+  { value: 1, label: "Normal (100%)" },
+  { value: 0.75, label: "Slightly shorter (75%)" },
+  { value: 0.5, label: "Shorter (50%)" },
+  { value: 0.25, label: "Much Shorter (25%)" },
+];
+
+export const TEMPORAL_GEAR_RESPAWN_USES_OPTIONS: NumberOption[] = [
+  { value: -1, label: "Infinite" },
+  { value: 20, label: "20 times" },
+  { value: 10, label: "10 times" },
+  { value: 5, label: "5 times" },
+  { value: 4, label: "4 times" },
+  { value: 3, label: "3 times" },
+  { value: 2, label: "2 times" },
+  { value: 1, label: "One time" },
+];
+
+export const STORY_STRUCTURE_DISTANCE_OPTIONS: NumberOption[] = [
+  { value: 0.15, label: "15%" },
+  { value: 0.25, label: "25%" },
+  { value: 0.5, label: "50%" },
+  { value: 0.75, label: "75%" },
+  { value: 1, label: "100%" },
+  { value: 1.5, label: "150%" },
+  { value: 2, label: "200%" },
+  { value: 3, label: "300%" },
+];
+
 export const DEFAULT_WORLD_GENERATION_CONFIG: VintageStoryWorldGenerationConfig = {
   playStyle: "surviveandbuild",
   gameMode: "survival",
@@ -527,13 +655,18 @@ export const DEFAULT_WORLD_GENERATION_CONFIG: VintageStoryWorldGenerationConfig 
   globalDepositSpawnRate: 1,
   surfaceCopperDeposits: 0.12,
   surfaceTinDeposits: 0.007,
+  storyStructuresDistScaling: 1,
   snowAccum: true,
   daysPerMonth: 9,
   graceTimer: 0,
+  droppedItemsTimer: 600,
   creatureHostility: "aggressive",
   creatureStrength: 1,
+  creatureSwimSpeed: 2,
   temporalStorms: "sometimes",
+  tempstormDurationMul: 1,
   temporalRifts: "visible",
+  temporalGearRespawnUses: 20,
   temporalStability: true,
   temporalStormSleeping: false,
   seasons: "enabled",
@@ -544,23 +677,32 @@ export const DEFAULT_WORLD_GENERATION_CONFIG: VintageStoryWorldGenerationConfig 
   playerHungerSpeed: 1,
   playerMoveSpeed: 1.5,
   playerHealthRegenSpeed: 1,
+  lungCapacity: 40000,
+  bodyTemperatureResistance: 0,
   foodSpoilSpeed: 1,
   saplingGrowthRate: 1,
   toolDurability: 1,
   toolMiningSpeed: 1,
+  propickNodeSearchRadius: 6,
+  microblockChiseling: "stonewood",
+  clutterObtainable: "ifrepaired",
   blockGravity: "sandgravel",
   caveIns: "off",
   harshWinters: true,
   allowPvp: true,
   allowFireSpread: true,
   allowFallingBlocks: true,
+  lightningFires: false,
   allowUndergroundFarming: false,
+  noLiquidSourceTransport: false,
   allowMap: true,
   allowCoordinateHud: true,
   colorAccurateWorldmap: false,
   allowLandClaiming: true,
   loreContent: true,
   classExclusiveRecipes: true,
+  auctionHouse: true,
+  allowTimeswitch: false,
   passTimeWhenEmpty: false,
   whitelistMode: false,
 };
@@ -603,13 +745,33 @@ export function normalizeWorldGenerationConfig(
     globalDepositSpawnRate: numberValue(input?.globalDepositSpawnRate, base.globalDepositSpawnRate, 0, 10),
     surfaceCopperDeposits: numberValue(input?.surfaceCopperDeposits, base.surfaceCopperDeposits, 0, 5),
     surfaceTinDeposits: numberValue(input?.surfaceTinDeposits, base.surfaceTinDeposits, 0, 5),
+    storyStructuresDistScaling: numberValue(
+      input?.storyStructuresDistScaling,
+      base.storyStructuresDistScaling,
+      0.15,
+      3,
+    ),
     snowAccum: boolValue(input?.snowAccum, base.snowAccum),
     daysPerMonth: intValue(input?.daysPerMonth, base.daysPerMonth, 1, 99),
     graceTimer: intValue(input?.graceTimer, base.graceTimer, 0, 9999),
+    droppedItemsTimer: intValue(input?.droppedItemsTimer, base.droppedItemsTimer, 1, 86400),
     creatureHostility: enumValue(input?.creatureHostility, CREATURE_HOSTILITY_OPTIONS, base.creatureHostility),
     creatureStrength: numberValue(input?.creatureStrength, base.creatureStrength, 0, 99),
+    creatureSwimSpeed: numberValue(input?.creatureSwimSpeed, base.creatureSwimSpeed, 0.5, 3),
     temporalStorms: enumValue(input?.temporalStorms, TEMPORAL_STORM_OPTIONS, base.temporalStorms),
+    tempstormDurationMul: numberValue(
+      input?.tempstormDurationMul,
+      base.tempstormDurationMul,
+      0.25,
+      2,
+    ),
     temporalRifts: enumValue(input?.temporalRifts, TEMPORAL_RIFT_OPTIONS, base.temporalRifts),
+    temporalGearRespawnUses: intValue(
+      input?.temporalGearRespawnUses,
+      base.temporalGearRespawnUses,
+      -1,
+      20,
+    ),
     temporalStability: boolValue(input?.temporalStability, base.temporalStability),
     temporalStormSleeping: boolValue(input?.temporalStormSleeping, base.temporalStormSleeping),
     seasons: enumValue(input?.seasons, SEASON_OPTIONS, base.seasons),
@@ -620,23 +782,53 @@ export function normalizeWorldGenerationConfig(
     playerHungerSpeed: numberValue(input?.playerHungerSpeed, base.playerHungerSpeed, 0, 10),
     playerMoveSpeed: numberValue(input?.playerMoveSpeed, base.playerMoveSpeed, 0, 10),
     playerHealthRegenSpeed: numberValue(input?.playerHealthRegenSpeed, base.playerHealthRegenSpeed, 0.25, 2),
+    lungCapacity: intValue(input?.lungCapacity, base.lungCapacity, 10000, 3600000),
+    bodyTemperatureResistance: numberValue(
+      input?.bodyTemperatureResistance,
+      base.bodyTemperatureResistance,
+      -40,
+      20,
+    ),
     foodSpoilSpeed: numberValue(input?.foodSpoilSpeed, base.foodSpoilSpeed, 0, 10),
     saplingGrowthRate: numberValue(input?.saplingGrowthRate, base.saplingGrowthRate, 0, 10),
     toolDurability: numberValue(input?.toolDurability, base.toolDurability, 0, 99),
     toolMiningSpeed: numberValue(input?.toolMiningSpeed, base.toolMiningSpeed, 0, 99),
+    propickNodeSearchRadius: intValue(
+      input?.propickNodeSearchRadius,
+      base.propickNodeSearchRadius,
+      0,
+      8,
+    ),
+    microblockChiseling: enumValue(
+      input?.microblockChiseling,
+      MICROBLOCK_CHISELING_OPTIONS,
+      base.microblockChiseling,
+    ),
+    clutterObtainable: enumValue(
+      input?.clutterObtainable,
+      CLUTTER_OBTAINABLE_OPTIONS,
+      base.clutterObtainable,
+    ),
     blockGravity: enumValue(input?.blockGravity, BLOCK_GRAVITY_OPTIONS, base.blockGravity),
     caveIns: enumValue(input?.caveIns, CAVE_IN_OPTIONS, base.caveIns),
     harshWinters: boolValue(input?.harshWinters, base.harshWinters),
     allowPvp: boolValue(input?.allowPvp, base.allowPvp),
     allowFireSpread: boolValue(input?.allowFireSpread, base.allowFireSpread),
     allowFallingBlocks: boolValue(input?.allowFallingBlocks, base.allowFallingBlocks),
+    lightningFires: boolValue(input?.lightningFires, base.lightningFires),
     allowUndergroundFarming: boolValue(input?.allowUndergroundFarming, base.allowUndergroundFarming),
+    noLiquidSourceTransport: boolValue(
+      input?.noLiquidSourceTransport,
+      base.noLiquidSourceTransport,
+    ),
     allowMap: boolValue(input?.allowMap, base.allowMap),
     allowCoordinateHud: boolValue(input?.allowCoordinateHud, base.allowCoordinateHud),
     colorAccurateWorldmap: boolValue(input?.colorAccurateWorldmap, base.colorAccurateWorldmap),
     allowLandClaiming: boolValue(input?.allowLandClaiming, base.allowLandClaiming),
     loreContent: boolValue(input?.loreContent, base.loreContent),
     classExclusiveRecipes: boolValue(input?.classExclusiveRecipes, base.classExclusiveRecipes),
+    auctionHouse: boolValue(input?.auctionHouse, base.auctionHouse),
+    allowTimeswitch: boolValue(input?.allowTimeswitch, base.allowTimeswitch),
     passTimeWhenEmpty: boolValue(input?.passTimeWhenEmpty, base.passTimeWhenEmpty),
     whitelistMode: boolValue(input?.whitelistMode, base.whitelistMode),
   };
@@ -651,10 +843,10 @@ export function toWorldConfigurationPayload(
     spawnRadius: String(config.spawnRadius),
     graceTimer: String(config.graceTimer),
     deathPunishment: config.deathPunishment,
-    droppedItemsTimer: "600",
+    droppedItemsTimer: String(config.droppedItemsTimer),
     seasons: config.seasons,
     playerlives: String(config.playerLives),
-    lungCapacity: "40000",
+    lungCapacity: String(config.lungCapacity),
     daysPerMonth: String(config.daysPerMonth),
     harshWinters: String(config.harshWinters),
     blockGravity: config.blockGravity,
@@ -662,11 +854,11 @@ export function toWorldConfigurationPayload(
     allowFireSpread: config.allowFireSpread,
     allowFallingBlocks: config.allowFallingBlocks,
     allowUndergroundFarming: config.allowUndergroundFarming,
-    noLiquidSourceTransport: false,
-    bodyTemperatureResistance: "0",
+    noLiquidSourceTransport: config.noLiquidSourceTransport,
+    bodyTemperatureResistance: numberString(config.bodyTemperatureResistance),
     creatureHostility: config.creatureHostility,
     creatureStrength: numberString(config.creatureStrength),
-    creatureSwimSpeed: "2",
+    creatureSwimSpeed: numberString(config.creatureSwimSpeed),
     playerHealthPoints: String(config.playerHealthPoints),
     playerHungerSpeed: numberString(config.playerHungerSpeed),
     playerHealthRegenSpeed: numberString(config.playerHealthRegenSpeed),
@@ -675,20 +867,20 @@ export function toWorldConfigurationPayload(
     saplingGrowthRate: numberString(config.saplingGrowthRate),
     toolDurability: numberString(config.toolDurability),
     toolMiningSpeed: numberString(config.toolMiningSpeed),
-    propickNodeSearchRadius: "6",
-    microblockChiseling: "stonewood",
+    propickNodeSearchRadius: String(config.propickNodeSearchRadius),
+    microblockChiseling: config.microblockChiseling,
     allowCoordinateHud: config.allowCoordinateHud,
     allowMap: config.allowMap,
     colorAccurateWorldmap: config.colorAccurateWorldmap,
     loreContent: config.loreContent,
-    clutterObtainable: "ifrepaired",
-    lightningFires: false,
-    allowTimeswitch: false,
+    clutterObtainable: config.clutterObtainable,
+    lightningFires: config.lightningFires,
+    allowTimeswitch: config.allowTimeswitch,
     temporalStability: config.temporalStability,
     temporalStorms: config.temporalStorms,
-    tempstormDurationMul: "1",
+    tempstormDurationMul: numberString(config.tempstormDurationMul),
     temporalRifts: config.temporalRifts,
-    temporalGearRespawnUses: "20",
+    temporalGearRespawnUses: String(config.temporalGearRespawnUses),
     temporalStormSleeping: config.temporalStormSleeping ? "1" : "0",
     worldClimate: config.worldClimate,
     landcover: numberString(config.landcover),
@@ -700,6 +892,7 @@ export function toWorldConfigurationPayload(
     worldLength: String(config.worldLength),
     worldEdge: config.worldEdge,
     polarEquatorDistance: String(config.polarEquatorDistance),
+    storyStructuresDistScaling: numberString(config.storyStructuresDistScaling),
     globalTemperature: numberString(config.globalTemperature),
     globalPrecipitation: numberString(config.globalPrecipitation),
     globalForestation: numberString(config.globalForestation),
@@ -709,7 +902,7 @@ export function toWorldConfigurationPayload(
     snowAccum: String(config.snowAccum),
     allowLandClaiming: config.allowLandClaiming,
     classExclusiveRecipes: config.classExclusiveRecipes,
-    auctionHouse: true,
+    auctionHouse: config.auctionHouse,
   };
 }
 
