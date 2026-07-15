@@ -147,10 +147,6 @@ export function ClothingOrganizer({ id }: { id: string }) {
   const dragTarget = selected ? targetFromDrag(drag.x, drag.y, selected.suggestedTarget) : null;
 
   React.useEffect(() => {
-    setQueueLimit(QUEUE_BATCH_SIZE);
-  }, [filter]);
-
-  React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const tagName = document.activeElement?.tagName.toLowerCase();
       if (tagName === "input" || tagName === "textarea" || tagName === "select") return;
@@ -469,7 +465,10 @@ export function ClothingOrganizer({ id }: { id: string }) {
                     type="button"
                     size="sm"
                     variant={filter === option.value ? "secondary" : "ghost"}
-                    onClick={() => setFilter(option.value)}
+                    onClick={() => {
+                      setFilter(option.value);
+                      setQueueLimit(QUEUE_BATCH_SIZE);
+                    }}
                   >
                     {option.label}
                   </Button>
