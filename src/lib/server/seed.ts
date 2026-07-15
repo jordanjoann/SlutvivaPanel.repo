@@ -11,6 +11,8 @@ import { vsPaths } from "./config";
 import { ensureGtaServerData } from "./gta/server-data";
 
 const LAND_CLAIM_MIN_SIZE = { X: 5, Y: 5, Z: 5 };
+const SERVER_ROLES_FILE_EDIT_WARNING =
+  "Role definitions live here. Server runtime settings live in serverconfig.json, and Stratum feature settings live in stratum.json.";
 
 const DEFAULT_ROLES = [
   {
@@ -153,14 +155,17 @@ export async function ensureRunnableServerConfig(inst: Instance): Promise<void> 
     return;
   }
 
-  const file = vsPaths(inst.id).serverConfig;
+  const paths = vsPaths(inst.id);
+  const file = paths.serverConfig;
   if (!existsSync(file)) {
     await writeJson(file, serverConfig(inst));
+    await ensureServerRoles(paths.serverRoles, {});
     return;
   }
 
   const raw = await fs.readFile(file, "utf8").catch(() => "");
   const current = parseJsonObject(raw);
+  await ensureServerRoles(paths.serverRoles, current);
   const next = withRequiredServerConfig(current, inst);
   if (JSON.stringify(current) !== JSON.stringify(next)) {
     await writeJson(file, next);
@@ -181,19 +186,15 @@ export async function seedInstanceContent(
   const p = vsPaths(inst.id);
 
   await writeJson(p.serverConfig, serverConfig(inst, input));
+  await ensureServerRoles(p.serverRoles, {});
 }
 
 function withRequiredServerConfig(config: Record<string, unknown>, inst?: Instance) {
   const rest = { ...config };
   delete rest.RoleByCode;
-  const roles = Array.isArray(config.Roles) ? config.Roles : [];
-  const hasDefaultRole = roles.some(
-    (role) =>
-      typeof role === "object" &&
-      role !== null &&
-      "Code" in role &&
-      role.Code === "suplayer",
-  );
+  delete rest.RolesByCode;
+  delete rest.Roles;
+  delete rest.DefaultRoleCode;
 
   const worldConfig: Record<string, unknown> =
     typeof config.WorldConfig === "object" &&
@@ -213,11 +214,6 @@ function withRequiredServerConfig(config: Record<string, unknown>, inst?: Instan
 
   return {
     ...rest,
-    DefaultRoleCode:
-      typeof config.DefaultRoleCode === "string"
-        ? config.DefaultRoleCode
-        : "suplayer",
-    Roles: hasDefaultRole ? roles : DEFAULT_ROLES,
     ModPaths: Array.isArray(config.ModPaths) ? config.ModPaths : ["Mods", "/data/Mods"],
     WorldConfig: {
       ...worldConfig,
@@ -225,6 +221,58 @@ function withRequiredServerConfig(config: Record<string, unknown>, inst?: Instan
       SaveFileLocation: saveFileLocation,
     },
   };
+}
+
+async function ensureServerRoles(
+  file: string,
+  legacyConfig: Record<string, unknown>,
+): Promise<void> {
+  const existing = parseJsonObject(await fs.readFile(file, "utf8").catch(() => ""));
+  if (roleCodes(existing).length > 0) return;
+
+  const legacyRoles = rolesFromConfig(legacyConfig);
+  const roles = legacyRoles.length > 0 ? legacyRoles : DEFAULT_ROLES;
+  const codes = roleCodes({ Roles: roles });
+  const requestedDefault = legacyConfig.DefaultRoleCode;
+  const defaultRoleCode =
+    typeof requestedDefault === "string" && codes.includes(requestedDefault)
+      ? requestedDefault
+      : codes.includes("suplayer")
+        ? "suplayer"
+        : codes[0];
+
+  await writeJson(file, {
+    FileEditWarning: SERVER_ROLES_FILE_EDIT_WARNING,
+    ConfigVersion: "1.0",
+    DefaultRoleCode: defaultRoleCode,
+    Roles: roles,
+  });
+}
+
+function rolesFromConfig(config: Record<string, unknown>): unknown[] {
+  if (Array.isArray(config.Roles)) return config.Roles;
+
+  for (const key of ["RoleByCode", "RolesByCode"]) {
+    const roleMap = config[key];
+    if (typeof roleMap === "object" && roleMap !== null && !Array.isArray(roleMap)) {
+      return Object.entries(roleMap).map(([code, role]) =>
+        typeof role === "object" && role !== null && !Array.isArray(role)
+          ? { Code: code, ...role }
+          : role,
+      );
+    }
+  }
+  return [];
+}
+
+function roleCodes(config: Record<string, unknown>): string[] {
+  return rolesFromConfig(config)
+    .map((role) =>
+      typeof role === "object" && role !== null && "Code" in role
+        ? role.Code
+        : undefined,
+    )
+    .filter((code): code is string => typeof code === "string" && code.length > 0);
 }
 
 function safeWorldFileName(name: string): string {

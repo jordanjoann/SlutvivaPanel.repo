@@ -143,6 +143,7 @@ export function vsPaths(serverId: string) {
     backups: path.join(data, "Backups"),
     backupSaves: path.join(data, "BackupSaves"),
     serverConfig: path.join(data, "serverconfig.json"),
+    serverRoles: path.join(data, "serverroles.json"),
   };
 }
 

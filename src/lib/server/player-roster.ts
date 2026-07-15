@@ -15,6 +15,7 @@ type PlayerRecord = {
 
 type ServerConfig = {
   RoleByCode?: Record<string, unknown>;
+  RolesByCode?: Record<string, unknown>;
   Roles?: Array<{ Code?: unknown }>;
   DefaultRoleCode?: unknown;
 };
@@ -148,26 +149,31 @@ export async function updateKnownPlayer(
 }
 
 async function readRoleConfig(serverId: string): Promise<RoleConfig> {
-  try {
-    const raw = await fs.readFile(vsPaths(serverId).serverConfig, "utf8");
-    const parsed = JSON.parse(raw) as ServerConfig;
-    const roles = roleCodesFromConfig(parsed);
-    if (roles.length > 0) {
-      const defaultRole = isNonEmptyString(parsed.DefaultRoleCode) &&
-        roles.includes(parsed.DefaultRoleCode)
-        ? parsed.DefaultRoleCode
-        : preferredDefaultRole(roles);
-      return { roles, defaultRole };
+  const paths = vsPaths(serverId);
+  for (const file of [paths.serverRoles, paths.serverConfig]) {
+    try {
+      const raw = await fs.readFile(file, "utf8");
+      const parsed = JSON.parse(raw) as ServerConfig;
+      const roles = roleCodesFromConfig(parsed);
+      if (roles.length > 0) {
+        const defaultRole = isNonEmptyString(parsed.DefaultRoleCode) &&
+          roles.includes(parsed.DefaultRoleCode)
+          ? parsed.DefaultRoleCode
+          : preferredDefaultRole(roles);
+        return { roles, defaultRole };
+      }
+    } catch {
+      /* try the legacy serverconfig.json location */
     }
-  } catch {
-    /* fall back below */
   }
   const roles = ["admin", "member"];
   return { roles, defaultRole: preferredDefaultRole(roles) };
 }
 
 function roleCodesFromConfig(config: ServerConfig): string[] {
-  const roleByCode = Object.keys(config.RoleByCode ?? {}).filter(isNonEmptyString);
+  const roleByCode = Object.keys(config.RoleByCode ?? config.RolesByCode ?? {}).filter(
+    isNonEmptyString,
+  );
   const roleArray = Array.isArray(config.Roles)
     ? config.Roles.map((role) => role.Code).filter(isNonEmptyString)
     : [];

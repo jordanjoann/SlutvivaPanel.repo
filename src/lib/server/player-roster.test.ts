@@ -103,7 +103,7 @@ describe("player roster", () => {
     expect(roster.defaultRole).toBe("suplayer");
   });
 
-  it("reads role options from serverconfig.json even when serverroles.json exists", async () => {
+  it("prefers role options from serverroles.json when both role files exist", async () => {
     const { getPlayerRoster } = await setupRoster({
       playerdata: [],
       panelPlayers: [],
@@ -125,8 +125,8 @@ describe("player roster", () => {
 
     const roster = await getPlayerRoster(instance(), []);
 
-    expect(roster.roles).toEqual(["guest", "spectator", "suplayer", "sumod", "admin"]);
-    expect(roster.defaultRole).toBe("suplayer");
+    expect(roster.roles).toEqual(["admin"]);
+    expect(roster.defaultRole).toBe("admin");
   });
 
   it("resolves managed player names through Vintage Story auth before caching", async () => {
